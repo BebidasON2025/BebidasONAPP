@@ -1,0 +1,25 @@
+// app/(app)/fornecedores/page.tsx
+import { useAppStore } from "@/store";
+
+const setSuppliers = (rows: any[]) => useAppStore.setState({ suppliers: rows });
+
+// app/(app)/financeiro/page.tsx
+import { useAppStore } from "@/store";
+
+function setEntries(rows: any[]) {
+  useAppStore.setState({ finance: { entries: rows } });
+}
+
+// app/(app)/pedidos/page.tsx
+import { useAppStore } from "@/store";
+
+function setOrders(rows: any[]) {
+  useAppStore.setState({ orders: rows });
+}
+
+// app/(app)/notas-fiscais/page.tsx
+import { useAppStore } from "@/store";
+
+function setInvoices(rows: any[]) {
+  useAppStore.setState({ invoices: rows });
+}

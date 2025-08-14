@@ -1,0 +1,51 @@
+// app/(app)/pedidos/page.tsx
+<Card className="hc-panel">
+  {/* Wrapper da tabela */}
+  <div className="rounded-md border hc-divider overflow-x-auto">
+    {/* Tabela aqui */}
+  </div>
+</Card>
+
+// app/(app)/estoque/page.tsx
+<Card className="hc-panel">
+  {/* Conteúdo aqui */}
+</Card>
+
+// app/(app)/clientes/page.tsx
+<Card className="hc-panel">
+  {/* Conteúdo aqui */}
+</Card>
+
+// app/(app)/fornecedores/page.tsx
+<Card className="hc-panel">
+  {/* Conteúdo aqui */}
+</Card>
+<div className="mt-6 rounded-md border hc-divider bg-[#1f242c]">
+  {/* Box interno aqui */}
+</div>
+
+// app/(app)/notas-fiscais/page.tsx
+<Card className="hc-panel">
+  {/* Conteúdo aqui */}
+</Card>
+<div className="inline-flex items-center rounded-md border hc-divider bg-[#1f242c] px-3 py-2 text-sm">
+  {/* Filtro "Todos" aqui */}
+</div>
+<div className="mt-6 rounded-md border hc-divider bg-[#121826]">
+  {/* Box da lista vazia aqui */}
+</div>
+
+// app/(app)/page.tsx (Dashboard)
+<Card className="hc-panel"> ... </Card>
+<Card className="hc-panel"> ... </Card>
+
+// app/(app)/relatorios/page.tsx
+<TabsList className="bg-[#2b3038] border hc-divider">
+  {/* Tabs aqui */}
+</TabsList>
+<Card className="hc-panel"> ... </Card>
+<Card className="hc-panel"> ... </Card>
+
+// app/(app)/financeiro/page.tsx
+<Card className="hc-panel"> ... </Card>
+<Card className="hc-panel"> ... </Card>

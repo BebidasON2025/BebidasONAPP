@@ -1,0 +1,56 @@
+/* Tema neutro cinza SEM áreas brancas, inclusive para tokens do shadcn/ui */
+@layer base {
+  /* Sobrescreve tokens para que bg-card, bg-background etc. sejam cinza */
+  :root {
+    color-scheme: dark;
+    /* valores hsl(var(--token)) do shadcn */
+    --background: 221 22% 12%; /* fundo geral */
+    --foreground: 210 40% 96%;
+
+    --card: 215 17% 20%; /* fundo dos Cards (antes branco) */
+    --card-foreground: 210 40% 96%;
+
+    --popover: 215 17% 20%;
+    --popover-foreground: 210 40% 96%;
+
+    --muted: 215 17% 16%;
+    --muted-foreground: 215 16% 75%;
+
+    --accent: 215 17% 20%;
+    --accent-foreground: 210 40% 96%;
+
+    --border: 215 16% 35%; /* bordas mais visíveis */
+    --input: 215 16% 35%;
+    --ring: 42 95% 51%; /* amarelo do foco */
+  }
+}
+
+/* Utilitários de alto contraste cinza */
+@layer utilities {
+  .hc-panel {
+    background-color: #262b33 !important;
+    border-color: #3a4150 !important;
+    color: rgb(229 231 235) !important; /* slate-200 */
+  }
+
+  .hc-field {
+    background-color: #1f242c !important;
+    border-color: #3a4150 !important;
+    color: rgb(229 231 235) !important;
+  }
+  .hc-field::placeholder {
+    color: rgb(203 213 225) !important; /* slate-300 */
+  }
+  .hc-field:focus-visible {
+    /* utilitárias padrão (sem arbitrários) */
+    @apply ring-2 ring-amber-500 ring-offset-0 outline-none;
+  }
+
+  .hc-divider {
+    border-color: #3a4150 !important;
+  }
+
+  .hc-muted {
+    color: rgb(203 213 225) !important; /* slate-300 */
+  }
+}

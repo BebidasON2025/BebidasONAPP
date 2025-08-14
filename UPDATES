@@ -1,0 +1,77 @@
+// app/(app)/layout.tsx
+<div className="min-h-screen w-full flex text-white bg-[#171a21]">
+  {/* Header */}
+  <header className="sticky top-0 z-10 h-14 bg-[#2b3038] border-b border-[#3a4150]">
+    {/* Icons */}
+    <Bell className="text-slate-100" />
+    <Sun className="text-slate-100" />
+    <HelpCircle className="text-slate-100" />
+    <Settings className="text-slate-100" />
+  </header>
+  {/* Main content */}
+  <main>
+    {/* Dashboard */}
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944] text-white">
+      Atualizar Dados
+    </button>
+    {/* Pedidos */}
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Atualizar
+    </button>
+    {/* Estoque */}
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Atualizar
+    </button>
+    {/* Financeiro */}
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Atualizar
+    </button>
+    {/* Clientes */}
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Botão 1
+    </button>
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Botão 2
+    </button>
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Botão 3
+    </button>
+    {/* Fornecedores */}
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Exportar
+    </button>
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Atualizar
+    </button>
+    <div className="mt-6 rounded-md border hc-divider bg-[#1f242c]">
+      {/* Caixas internas */}
+    </div>
+    {/* Notas Fiscais */}
+    <button className="inline-flex items-center rounded-md border hc-divider bg-[#1f242c] px-3 py-2 text-sm">
+      Todos
+    </button>
+    <div className="mt-6 rounded-md border hc-divider bg-[#1f242c]">
+      {/* Lista vazia */}
+    </div>
+    {/* Relatórios */}
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Botão 1
+    </button>
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Botão 2
+    </button>
+    <button className="bg-[#2b3038] border border-[#3a4150] hover:bg-[#333944]">
+      Botão 3
+    </button>
+    <div className="bg-[#2b3038] border hc-divider">
+      {/* TabsList */}
+    </div>
+    {/* Low Stock List */}
+    <div className="rounded-md border hc-divider bg-[#1f242c] px-3 py-2 text-sm hc-muted">
+      {/* Estado vazio */}
+    </div>
+    <div className="flex items-center justify-between rounded-md border hc-divider bg-[#1f242c] px-3 py-2">
+      {/* Item da lista */}
+    </div>
+  </main>
+</div>

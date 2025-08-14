@@ -1,0 +1,56 @@
+// app/(app)/fornecedores/page.tsx
+import { useAppStore } from './store'; // Assuming useAppStore is imported from a store file
+
+const FornecedoresPage = () => {
+const setSuppliers = (rows: any[]) => useAppStore.setState({ suppliers: rows }); // Updated setter using hook API
+
+// /** rest of code here **/
+
+return (
+  <div>
+    {/* Component code here */}
+  </div>
+);
+};
+
+export default FornecedoresPage;
+
+// app/(app)/financeiro/page.tsx
+import { useAppStore } from './store'; // Assuming useAppStore is imported from a store file
+
+const FinanceiroPage = () => {
+function setEntries(rows: any[]) {
+  useAppStore.setState((prev: any) => ({
+    finance: { ...(prev.finance ?? {}), entries: rows },
+  }));
+}
+
+// /** rest of code here **/
+
+return (
+  <div>
+    {/* Component code here */}
+  </div>
+);
+};
+
+export default FinanceiroPage;
+
+// app/(app)/notas-fiscais/page.tsx
+import { useAppStore } from './store'; // Assuming useAppStore is imported from a store file
+
+const NotasFiscaisPage = () => {
+function setInvoices(rows: any[]) {
+  useAppStore.setState({ invoices: rows });
+}
+
+// /** rest of code here **/
+
+return (
+  <div>
+    {/* Component code here */}
+  </div>
+);
+};
+
+export default NotasFiscaisPage;

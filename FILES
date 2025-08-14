@@ -1,0 +1,51 @@
+// app/(app)/pedidos/page.tsx
+<Card className="hc-panel">
+  {/* Table wrapper */}
+  <div className="rounded-md border hc-divider overflow-x-auto">
+    {/* Table content here */}
+  </div>
+</Card>
+
+// app/(app)/estoque/page.tsx
+<Card className="hc-panel">
+  {/* Estoque content here */}
+</Card>
+
+// app/(app)/clientes/page.tsx
+<Card className="hc-panel">
+  {/* Clientes content here */}
+</Card>
+
+// app/(app)/fornecedores/page.tsx
+<Card className="hc-panel">
+  {/* Fornecedores content here */}
+</Card>
+
+// app/(app)/notas-fiscais/page.tsx
+<Card className="hc-panel">
+  {/* Notas fiscais content here */}
+</Card>
+
+// app/(app)/page.tsx (Dashboard)
+<Card className="hc-panel">
+  {/* Large card content here */}
+</Card>
+<Card className="hc-panel">
+  {/* Another large card content here */}
+</Card>
+
+// app/(app)/relatorios/page.tsx
+<Card className="hc-panel">
+  {/* Relatorios content here */}
+</Card>
+
+// app/(app)/financeiro/page.tsx
+<Card className="hc-panel">
+  {/* Financeiro content here */}
+</Card>
+
+// components/search-input.tsx
+// No changes needed
+
+// components/low-stock-list.tsx
+// No changes needed
