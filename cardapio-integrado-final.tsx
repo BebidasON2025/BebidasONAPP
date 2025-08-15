@@ -421,35 +421,59 @@ function BebidasOnAppContent() {
 
   const carregarBebidas = async () => {
     try {
-      console.log("🍻 Carregando TODAS as bebidas (SEM LIMITE)...")
+      console.log("🍻 Carregando produtos e categorias...")
 
-      // 🔥 REMOVIDO LIMITE - Carrega TODAS as bebidas
-      const { data: bebidasData, error: bebidasError } = await supabase
-        .from("bebidas")
-        .select(`
-        *,
-        categorias (
-          id,
-          nome,
-          icone,
-          cor,
-          ativo
-        )
-      `)
+      // Carregar categorias primeiro
+      const { data: categoriasData, error: categoriasError } = await supabase
+        .from("categorias")
+        .select("*")
         .eq("ativo", true)
-        .order("nome")
 
-      if (bebidasError) throw bebidasError
+      if (categoriasError) throw categoriasError
 
-      const bebidasComCategorias = (bebidasData || []).map((bebida) => ({
-        ...bebida,
-        categoria: bebida.categorias || null,
-      }))
+      // Carregar produtos
+      const { data: produtosData, error: produtosError } = await supabase.from("produtos").select("*").order("nome")
+
+      if (produtosError) throw produtosError
+
+      // Criar mapa de categorias para lookup rápido
+      const categoriasMap = new Map()
+      categoriasData?.forEach((cat) => {
+        categoriasMap.set(cat.nome, cat)
+      })
+
+      const bebidasComCategorias = (produtosData || []).map((produto) => {
+        const categoriaInfo = categoriasMap.get(produto.categoria) || {
+          id: 1,
+          nome: produto.categoria || "Geral",
+          icone: "package",
+          cor: "amber",
+          ativo: true,
+        }
+
+        return {
+          id: produto.id,
+          nome: produto.nome,
+          descricao: produto.descricao || "",
+          preco: produto.preco,
+          categoria_id: categoriaInfo.id,
+          categoria: {
+            id: categoriaInfo.id,
+            nome: categoriaInfo.nome,
+            icone: categoriaInfo.icone || "package",
+            cor: categoriaInfo.cor || "amber",
+            ativo: categoriaInfo.ativo,
+          },
+          imagem: produto.imagem || "/placeholder.svg?height=200&width=300&text=Produto",
+          estoque: produto.estoque || 0,
+          ativo: true,
+        }
+      })
 
       setBebidas(bebidasComCategorias)
-      console.log(`✅ ${bebidasComCategorias.length} bebidas carregadas com sucesso (SEM LIMITE)`)
+      console.log(`✅ ${bebidasComCategorias.length} produtos carregados com categorias`)
     } catch (error) {
-      console.error("❌ Erro ao carregar bebidas:", error)
+      console.error("❌ Erro ao carregar produtos:", error)
     }
   }
 
@@ -712,12 +736,11 @@ function BebidasOnAppContent() {
           console.log("⚠️ Erro na sincronização, mas pedido foi salvo:", syncError)
         }
 
-        // Atualizar estoque
         console.log("📦 Atualizando estoque...")
         for (const item of carrinho) {
           const novoEstoque = Math.max(0, item.bebida.estoque - item.quantidade)
           const { error: estoqueError } = await supabase
-            .from("bebidas")
+            .from("produtos")
             .update({ estoque: novoEstoque })
             .eq("id", item.bebida.id)
 
@@ -1174,16 +1197,15 @@ function BebidasOnAppContent() {
     try {
       setCarregando(true)
       const { data, error } = await supabase
-        .from("bebidas")
+        .from("produtos")
         .insert([
           {
             nome: novoItem.nome,
             descricao: novoItem.descricao,
             preco: Number.parseFloat(novoItem.preco),
             categoria_id: Number.parseInt(novoItem.categoria_id),
-            imagem: novoItem.imagem || "/placeholder.svg?height=200&width=300&text=Bebida",
+            imagem: novoItem.imagem || "/placeholder.svg?height=200&width=300&text=Produto",
             estoque: Number.parseInt(novoItem.estoque) || 0,
-            ativo: true,
           },
         ])
         .select()
@@ -1231,7 +1253,7 @@ function BebidasOnAppContent() {
       }
 
       try {
-        const { error } = await supabase.from("bebidas").delete().eq("id", id)
+        const { error } = await supabase.from("produtos").delete().eq("id", id)
         if (error) {
           addToast({
             type: "error",
@@ -1263,7 +1285,7 @@ function BebidasOnAppContent() {
     }
 
     try {
-      const { error } = await supabase.from("bebidas").update({ estoque: novoEstoque }).eq("id", id)
+      const { error } = await supabase.from("produtos").update({ estoque: novoEstoque }).eq("id", id)
       if (error) {
         addToast({
           type: "error",
@@ -1421,7 +1443,7 @@ function BebidasOnAppContent() {
     try {
       setCarregando(true)
       const { error } = await supabase
-        .from("bebidas")
+        .from("produtos")
         .update({
           nome: editandoItem.nome,
           descricao: editandoItem.descricao,
@@ -1684,91 +1706,121 @@ function BebidasOnAppContent() {
           <div className="absolute top-32 right-16 w-16 h-16 bg-white/5 rounded-full animate-float-2"></div>
           <div className="absolute bottom-32 left-20 w-12 h-12 bg-white/10 rounded-full animate-float-3"></div>
           <div className="absolute bottom-20 right-32 w-24 h-24 bg-white/5 rounded-full animate-float-4"></div>
-          <div className="absolute top-1/2 left-8 w-8 h-8 bg-white/10 rounded-full animate-float-5"></div>
-          <div className="absolute top-1/3 right-8 w-14 h-14 bg-white/5 rounded-full animate-float-6"></div>
         </div>
 
-        <div className="flex-1 flex items-center justify-center p-4 relative z-10">
-          <div className="text-center space-y-8 max-w-md w-full">
-            {/* Logo da empresa com animações */}
-            <div className="glass-effect rounded-3xl p-8 shadow-2xl border border-white/20 hover-lift animate-fadeInScale">
-              <div className="mb-6">
-                <div className="w-48 h-48 mx-auto rounded-full overflow-hidden shadow-2xl border-4 border-white/30 animate-logo-chamativa">
-                  <Image
-                    src="/logo-bebidas-on.png"
-                    alt="Bebidas ON Logo"
-                    width={200}
-                    height={200}
-                    className="w-full h-full object-cover animate-float"
-                    priority
-                  />
-                </div>
-              </div>
-              <h1 className="text-4xl font-bold text-white mb-2 animate-bounce-custom">BEBIDAS ON</h1>
-              <div className="bg-gradient-to-r from-yellow-300 to-green-400 bg-clip-text text-transparent animate-pulse-custom">
-                <p className="text-xl font-bold mb-2">🚚 DELIVERY PREMIUM</p>
-              </div>
-              <p className="text-white/90 text-lg font-medium animate-slideInUp">Buzinou, chegou! 📱</p>
-              {modoTeste && <Badge className="mt-3 bg-yellow-500 text-black text-sm animate-bounce">🧪 DEMO</Badge>}
-            </div>
+        {/* Conteúdo principal */}
+        <header className="py-6 px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <h1 className="text-4xl font-extrabold text-white tracking-tight">🍻 Bebidas ON Delivery 🍻</h1>
+            <p className="mt-2 text-lg text-yellow-100">Seu delivery de bebidas geladas em Paraíso/SP e região!</p>
+          </div>
+        </header>
 
-            {!lojaAberta && (
-              <div className="bg-red-500 text-white p-4 rounded-xl text-center animate-pulse">
-                <h3 className="text-xl font-bold mb-2">🔴 LOJA FECHADA</h3>
-                <p className="text-sm">Não estamos aceitando pedidos no momento</p>
-              </div>
-            )}
+        <main className="flex-grow overflow-auto p-4 sm:p-6 lg:p-8">
+          <div className="max-w-4xl mx-auto text-center">
+            <Button size="lg" className="w-full mb-4" onClick={() => setTelaAtual("cardapio")}>
+              🎉 Fazer meu pedido agora!
+            </Button>
+            <Button variant="secondary" className="w-full" onClick={acessoAdmin}>
+              🔒 Acesso administrativo
+            </Button>
+          </div>
+        </main>
 
-            <div className="space-y-4 animate-fadeInUp" style={{ animationDelay: "0.3s" }}>
-              <Button
-                onClick={() => setTelaAtual("cardapio")}
-                className={`w-full text-lg py-6 rounded-2xl font-bold shadow-xl hover-lift animate-glow bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-white`}
-              >
-                🍻 Ver Cardápio Completo
+        <Rodape />
+      </div>
+    )
+  }
+
+  // TELA DO CARDÁPIO
+  if (telaAtual === "cardapio") {
+    return (
+      <div className="min-h-screen bg-gray-100">
+        <header className="bg-white shadow">
+          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-gray-900">🍻 Cardápio Digital</h1>
+            <div className="flex items-center space-x-4">
+              <Button variant="outline" size="icon" onClick={() => setTelaAtual("inicio")}>
+                <Package className="w-5 h-5" />
+                <span>Início</span>
               </Button>
-
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="glass-effect rounded-xl p-3 border border-white/20 hover-lift animate-slideInLeft stagger-1">
-                  <div className="text-2xl mb-1 animate-bounce">⚡</div>
-                  <p className="text-white/80 text-xs font-medium">Entrega Rápida</p>
-                </div>
-                <div className="glass-effect rounded-xl p-3 border border-white/20 hover-lift animate-fadeInScale stagger-2">
-                  <div className="text-2xl mb-1 animate-bounce" style={{ animationDelay: "0.2s" }}>
-                    🧊
-                  </div>
-                  <p className="text-white/80 text-xs font-medium">Sempre Gelado</p>
-                </div>
-                <div className="glass-effect rounded-xl p-3 border border-white/20 hover-lift animate-slideInRight stagger-3">
-                  <div className="text-2xl mb-1 animate-bounce" style={{ animationDelay: "0.4s" }}>
-                    💳
-                  </div>
-                  <p className="text-white/80 text-xs font-medium">Pix, Cartão ou Dinheiro</p>
-                </div>
-              </div>
-
-              {/* Card compacto de pedido mínimo */}
-              <div
-                className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20 hover:bg-white/20 transition-all duration-300 animate-fadeInUp"
-                style={{ animationDelay: "0.5s" }}
-              >
-                <div className="text-center">
-                  <div className="flex items-center justify-center space-x-2 mb-2">
-                    <div className="text-2xl animate-moto-parada">🏍️</div>
-                    <h4 className="text-lg font-bold text-white">Pedido Mínimo</h4>
-                  </div>
-                  <p className="text-white/90 text-sm font-semibold">
-                    Entrega disponível para pedidos <span className="text-yellow-300 font-bold">acima de R$ 20,00</span>
-                  </p>
-                  <p className="text-white/80 text-xs mt-1">
-                    Taxa: R$ {TAXA_ENTREGA.toFixed(2)} • Retirada sempre gratuita
-                  </p>
-                </div>
-              </div>
+              <Button variant="outline" size="icon" onClick={() => setTelaAtual("carrinho")}>
+                <ShoppingCart className="w-5 h-5" />
+                <span>Carrinho ({totalItens})</span>
+              </Button>
             </div>
           </div>
-        </div>
+        </header>
 
-        {/* Rodapé */}
+        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="mb-4 flex items-center space-x-2">
+            <Input
+              type="search"
+              placeholder="Buscar bebida..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+            <Search className="w-5 h-5 text-gray-500" />
+          </div>
+
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-700 mb-2">Categorias</h2>
+            <div className="flex overflow-x-auto space-x-2">
+              <Button
+                variant={categoriaFiltro === "todas" ? "default" : "outline"}
+                onClick={() => setCategoriaFiltro("todas")}
+              >
+                Todas
+              </Button>
+              {categorias.map((categoria) => (
+                <Button
+                  key={categoria.id}
+                  variant={categoriaFiltro === categoria.id ? "default" : "outline"}
+                  onClick={() => setCategoriaFiltro(categoria.id)}
+                >
+                  {categoria.nome}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {bebidasFiltradas.length === 0 ? (
+              <div className="text-center text-gray-500 col-span-full">Nenhuma bebida encontrada.</div>
+            ) : (
+              bebidasFiltradas.map((bebida) => (
+                <Card key={bebida.id}>
+                  <CardContent className="p-4">
+                    <div className="relative">
+                      <Image
+                        src={bebida.imagem || "/placeholder.svg"}
+                        alt={bebida.nome}
+                        width={300}
+                        height={200}
+                        className="rounded-md object-cover w-full h-48"
+                      />
+                      <Badge className="absolute top-2 right-2" variant="secondary">
+                        R$ {bebida.preco.toFixed(2)}
+                      </Badge>
+                    </div>
+                    <h3 className="mt-2 text-lg font-semibold text-gray-800">{bebida.nome}</h3>
+                    <p className="text-sm text-gray-600">{bebida.descricao}</p>
+                    <div className="mt-2 flex items-center justify-between">
+                      <Badge className={getStatusEstoque(bebida.estoque).cor}>
+                        {getStatusEstoque(bebida.estoque).texto}
+                      </Badge>
+                      <Button onClick={() => adicionarAoCarrinho(bebida)}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Adicionar
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </main>
+
         <Rodape />
       </div>
     )
@@ -1777,223 +1829,138 @@ function BebidasOnAppContent() {
   // TELA DO CARRINHO
   if (telaAtual === "carrinho") {
     return (
-      <div className="min-h-screen bg-white">
-        <div className="bg-gradient-to-r from-orange-400 via-orange-500 to-yellow-500 p-4 text-white sticky top-0 z-10 shadow-lg">
-          <div className="flex items-center justify-between max-w-6xl mx-auto">
-            <Button
-              variant="ghost"
-              onClick={() => setTelaAtual("inicio")}
-              className="text-white hover:bg-white/20 font-semibold hover-lift"
-            >
-              ← Início
-            </Button>
-            <div className="flex items-center space-x-3">
-              <div
-                className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/30 cursor-pointer hover-lift animate-logo-suave"
-                onDoubleClick={acessoAdmin}
-              >
-                <Image
-                  src="/logo-bebidas-on.png"
-                  alt="Logo"
-                  width={40}
-                  height={40}
-                  className="w-full h-full object-cover animate-float"
-                />
-              </div>
-              <div className="text-center">
-                <h1 className="text-2xl font-bold">Cardápio</h1>
-                {modoTeste && <Badge className="bg-yellow-500 text-black text-xs">🧪 DEMO</Badge>}
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              onClick={() => setTelaAtual("carrinho")}
-              className="text-white hover:bg-white/20 relative font-semibold hover-lift"
-              disabled={!lojaAberta}
-            >
-              <ShoppingCart className="w-6 h-6 mr-2" />
-              <span className="hidden sm:inline">Carrinho</span>
-              {totalItens > 0 && (
-                <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center rounded-full animate-bounce">
-                  {totalItens}
-                </Badge>
-              )}
-            </Button>
-          </div>
-        </div>
-        {!lojaAberta && (
-          <div className="bg-gradient-to-r from-orange-100 to-yellow-50 border-l-4 border-orange-500 p-4 mx-4 mt-4 rounded-lg shadow-lg animate-pulse">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm">⏰</span>
-                </div>
-              </div>
-              <div className="ml-3">
-                <p className="text-orange-800 font-bold">
-                  Loja Fechada: Não estamos fazendo pedidos no momento. Volte mais tarde!
-                </p>
-              </div>
+      <div className="min-h-screen bg-gray-100">
+        <header className="bg-white shadow">
+          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-gray-900">🛒 Seu Carrinho</h1>
+            <div className="flex items-center space-x-4">
+              <Button variant="outline" size="icon" onClick={() => setTelaAtual("cardapio")}>
+                <Package className="w-5 h-5" />
+                <span>Continuar comprando</span>
+              </Button>
             </div>
           </div>
-        )}
+        </header>
 
-        <div className="max-w-4xl mx-auto p-4">
+        <main className="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8">
           {carrinho.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="bg-gradient-to-br from-orange-100 to-yellow-100 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
-                <ShoppingCart className="w-12 h-12 text-orange-500" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-700 mb-2">Carrinho vazio</h2>
-              <p className="text-gray-500 mb-6">Adicione algumas bebidas para continuar</p>
-              <Button
-                onClick={() => setTelaAtual("cardapio")}
-                className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold px-8 py-3 rounded-xl"
-              >
-                🍻 Ver Cardápio
+            <div className="text-center text-gray-500">
+              Seu carrinho está vazio.
+              <Button variant="link" onClick={() => setTelaAtual("cardapio")}>
+                Adicionar itens
               </Button>
             </div>
           ) : (
-            <div className="space-y-6">
-              {/* Itens do Carrinho */}
-              <div className="space-y-4">
+            <>
+              <ul className="divide-y divide-gray-200 mb-4">
                 {carrinho.map((item) => (
-                  <Card key={item.bebida.id} className="shadow-lg">
-                    <CardContent className="p-4">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100">
-                          <Image
-                            src={item.bebida.imagem || "/placeholder.svg?height=64&width=64&text=Bebida"}
-                            alt={item.bebida.nome}
-                            width={64}
-                            height={64}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-bold text-lg">{item.bebida.nome}</h3>
-                          <p className="text-gray-600">R$ {item.bebida.preco.toFixed(2)} cada</p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removerDoCarrinho(item.bebida.id)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </Button>
-                          <span className="font-bold text-lg w-8 text-center">{item.quantidade}</span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => adicionarAoCarrinho(item.bebida, 1)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-lg text-green-600">
-                            R$ {(item.bebida.preco * item.quantidade).toFixed(2)}
-                          </p>
-                        </div>
+                  <li key={item.bebida.id} className="py-4 flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <Image
+                        src={item.bebida.imagem || "/placeholder.svg"}
+                        alt={item.bebida.nome}
+                        width={80}
+                        height={60}
+                        className="rounded-md object-cover"
+                      />
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-800">{item.bebida.nome}</h3>
+                        <p className="text-sm text-gray-600">R$ {item.bebida.preco.toFixed(2)}</p>
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removerDoCarrinho(item.bebida.id)}
+                        disabled={item.quantidade <= 1}
+                      >
+                        <Minus className="w-4 h-4" />
+                      </Button>
+                      <span className="text-gray-700">{item.quantidade}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => adicionarAoCarrinho(item.bebida, 1)}
+                        disabled={item.quantidade >= item.bebida.estoque}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
 
-              {/* Resumo do Pedido */}
-              <Card className="shadow-lg bg-gradient-to-r from-green-50 to-blue-50">
-                <CardContent className="p-6">
-                  <h3 className="text-xl font-bold mb-4">Resumo do Pedido</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Subtotal ({totalItens} itens):</span>
-                      <span className="font-semibold">R$ {subtotalItens.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Taxa de entrega:</span>
-                      <span className="font-semibold">
-                        {tipoEntrega === "entrega" ? `R$ ${TAXA_ENTREGA.toFixed(2)}` : "Grátis"}
-                      </span>
-                    </div>
-                    <div className="border-t pt-2 flex justify-between text-xl font-bold text-green-600">
-                      <span>Total:</span>
-                      <span>R$ {(totalCarrinho + (tipoEntrega === "entrega" ? TAXA_ENTREGA : 0)).toFixed(2)}</span>
-                    </div>
+              <div className="bg-white shadow-md rounded-md p-4">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Resumo do Pedido</h2>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-700">Subtotal:</span>
+                  <span className="font-semibold text-gray-800">R$ {subtotalItens.toFixed(2)}</span>
+                </div>
+                {tipoEntrega === "entrega" && (
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-700">Taxa de entrega:</span>
+                    <span className="font-semibold text-gray-800">R$ {TAXA_ENTREGA.toFixed(2)}</span>
                   </div>
-                </CardContent>
-              </Card>
+                )}
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-gray-700">Total:</span>
+                  <span className="text-xl font-bold text-gray-900">
+                    R$ {(subtotalItens + (tipoEntrega === "entrega" ? TAXA_ENTREGA : 0)).toFixed(2)}
+                  </span>
+                </div>
 
-              {/* Tipo de Entrega */}
-              <Card className="shadow-lg">
-                <CardContent className="p-6">
-                  <h3 className="text-xl font-bold mb-4">Tipo de Entrega</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Button
-                      variant={tipoEntrega === "retirada" ? "default" : "outline"}
-                      onClick={() => setTipoEntrega("retirada")}
-                      className="p-4 h-auto flex flex-col items-center space-y-2"
-                    >
-                      <div className="text-2xl">🏪</div>
-                      <div>
-                        <div className="font-bold">Retirada</div>
-                        <div className="text-sm opacity-70">Grátis</div>
-                      </div>
-                    </Button>
-                    <Button
-                      variant={tipoEntrega === "entrega" ? "default" : "outline"}
-                      onClick={() => setTipoEntrega("entrega")}
-                      className="p-4 h-auto flex flex-col items-center space-y-2"
-                      disabled={totalCarrinho < PEDIDO_MINIMO_ENTREGA}
-                    >
-                      <div className="text-2xl">🚚</div>
-                      <div>
-                        <div className="font-bold">Entrega</div>
-                        <div className="text-sm opacity-70">R$ {TAXA_ENTREGA.toFixed(2)}</div>
-                      </div>
-                    </Button>
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Tipo de Entrega</h3>
+                  <div className="flex items-center space-x-4">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        value="retirada"
+                        checked={tipoEntrega === "retirada"}
+                        onChange={() => setTipoEntrega("retirada")}
+                        className="focus:ring-0"
+                      />
+                      <span>Retirada no local</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        value="entrega"
+                        checked={tipoEntrega === "entrega"}
+                        onChange={() => setTipoEntrega("entrega")}
+                        className="focus:ring-0"
+                        disabled={totalCarrinho < PEDIDO_MINIMO_ENTREGA}
+                      />
+                      <span>Entrega</span>
+                      {totalCarrinho < PEDIDO_MINIMO_ENTREGA && (
+                        <Badge variant="outline">Mínimo R$ {PEDIDO_MINIMO_ENTREGA.toFixed(2)}</Badge>
+                      )}
+                    </label>
                   </div>
-                  {totalCarrinho < PEDIDO_MINIMO_ENTREGA && (
-                    <p className="text-red-600 text-sm mt-2 text-center">
-                      Pedido mínimo para entrega: R$ {PEDIDO_MINIMO_ENTREGA.toFixed(2)}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+                </div>
 
-              {/* Endereço de Entrega */}
-              {tipoEntrega === "entrega" && (
-                <Card className="shadow-lg">
-                  <CardContent className="p-6">
-                    <h3 className="text-xl font-bold mb-4">Endereço de Entrega</h3>
+                {tipoEntrega === "entrega" && (
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-2">Endereço de Entrega</h3>
                     <Input
                       type="text"
-                      placeholder="Digite seu endereço completo (opcional)..."
+                      placeholder="Digite seu endereço completo"
                       value={enderecoEntrega}
                       onChange={(e) => setEnderecoEntrega(e.target.value)}
-                      className="w-full"
                     />
-                    <p className="text-sm text-gray-500 mt-2">
-                      💡 Se informar o endereço, enviaremos sua localização junto com o pedido
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
+                  </div>
+                )}
 
-              {/* Botão Finalizar */}
-              <Button
-                onClick={() => setTelaAtual("pagamento")}
-                disabled={carrinho.length === 0}
-                className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-4 text-lg rounded-xl"
-              >
-                🛒 Finalizar Pedido
-              </Button>
-            </div>
+                <Button className="w-full" onClick={() => setTelaAtual("pagamento")}>
+                  Continuar para o Pagamento
+                </Button>
+              </div>
+            </>
           )}
-        </div>
+        </main>
+
+        <Rodape />
       </div>
     )
   }
@@ -2001,1312 +1968,669 @@ function BebidasOnAppContent() {
   // TELA DE PAGAMENTO
   if (telaAtual === "pagamento") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50">
-        <div className="bg-gradient-to-r from-orange-400 via-orange-500 to-yellow-500 p-4 text-white sticky top-0 z-10 shadow-lg">
-          <div className="flex items-center justify-between max-w-6xl mx-auto">
-            <Button
-              variant="ghost"
-              onClick={() => setTelaAtual("carrinho")}
-              className="text-white hover:bg-white/20 font-semibold"
-            >
-              ← Voltar
-            </Button>
-            <h1 className="text-2xl font-bold">Pagamento</h1>
-            <div className="w-20"></div>
+      <div className="min-h-screen bg-gray-100">
+        <header className="bg-white shadow">
+          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-gray-900">💰 Pagamento</h1>
+            <div className="flex items-center space-x-4">
+              <Button variant="outline" size="icon" onClick={() => setTelaAtual("carrinho")}>
+                <ShoppingCart className="w-5 h-5" />
+                <span>Voltar ao carrinho</span>
+              </Button>
+            </div>
           </div>
-        </div>
+        </header>
 
-        <div className="max-w-2xl mx-auto p-4 space-y-6">
-          {/* Resumo Final */}
-          <Card className="shadow-lg bg-gradient-to-r from-green-50 to-blue-50">
-            <CardContent className="p-6">
-              <h3 className="text-xl font-bold mb-4">Resumo Final</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>R$ {subtotalItens.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Entrega:</span>
-                  <span>{tipoEntrega === "entrega" ? `R$ ${TAXA_ENTREGA.toFixed(2)}` : "Grátis"}</span>
-                </div>
-                <div className="border-t pt-2 flex justify-between text-xl font-bold text-green-600">
-                  <span>Total:</span>
-                  <span>R$ {(totalCarrinho + (tipoEntrega === "entrega" ? TAXA_ENTREGA : 0)).toFixed(2)}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <main className="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="bg-white shadow-md rounded-md p-4">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Informações de Pagamento</h2>
 
-          {/* Forma de Pagamento */}
-          <Card className="shadow-lg">
-            <CardContent className="p-6">
-              <h3 className="text-xl font-bold mb-4">Forma de Pagamento</h3>
-              <div className="grid grid-cols-3 gap-4">
-                <Button
-                  variant={formaPagamento === "pix" ? "default" : "outline"}
-                  onClick={() => setFormaPagamento("pix")}
-                  className="p-4 h-auto flex flex-col items-center space-y-2"
-                >
-                  <div className="text-2xl">📱</div>
-                  <div className="font-bold">PIX</div>
-                </Button>
-                <Button
-                  variant={formaPagamento === "cartao" ? "default" : "outline"}
-                  onClick={() => setFormaPagamento("cartao")}
-                  className="p-4 h-auto flex flex-col items-center space-y-2"
-                >
-                  <div className="text-2xl">💳</div>
-                  <div className="font-bold">Cartão</div>
-                </Button>
-                <Button
-                  variant={formaPagamento === "dinheiro" ? "default" : "outline"}
-                  onClick={() => setFormaPagamento("dinheiro")}
-                  className="p-4 h-auto flex flex-col items-center space-y-2"
-                >
-                  <div className="text-2xl">💵</div>
-                  <div className="font-bold">Dinheiro</div>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Valor Pago (apenas para dinheiro) */}
-          {formaPagamento === "dinheiro" && (
-            <Card className="shadow-lg border-orange-200">
-              <CardContent className="p-6">
-                <h3 className="text-xl font-bold mb-4 text-orange-800">💵 Dinheiro</h3>
-                <p className="text-sm text-gray-600 mb-2">Pagamento na entrega</p>
-
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Valor que você vai pagar:</label>
-                  <Input
-                    type="number"
-                    placeholder={`Mínimo: R$ ${(totalCarrinho + (tipoEntrega === "entrega" ? TAXA_ENTREGA : 0)).toFixed(2)}`}
-                    value={valorPago}
-                    onChange={(e) => setValorPago(e.target.value)}
-                    className="w-full text-lg border-yellow-300 focus:border-yellow-500"
-                    step="0.01"
-                    min={(totalCarrinho + (tipoEntrega === "entrega" ? TAXA_ENTREGA : 0)).toFixed(2)}
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">Forma de Pagamento</h3>
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    value="pix"
+                    checked={formaPagamento === "pix"}
+                    onChange={() => setFormaPagamento("pix")}
+                    className="focus:ring-0"
                   />
-                </div>
+                  <span>PIX</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    value="dinheiro"
+                    checked={formaPagamento === "dinheiro"}
+                    onChange={() => setFormaPagamento("dinheiro")}
+                    className="focus:ring-0"
+                  />
+                  <span>Dinheiro</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    value="cartao"
+                    checked={formaPagamento === "cartao"}
+                    onChange={() => setFormaPagamento("cartao")}
+                    className="focus:ring-0"
+                    disabled
+                  />
+                  <span>Cartão (em breve)</span>
+                  <Badge variant="outline">Em breve</Badge>
+                </label>
+              </div>
+            </div>
 
-                {valorPago && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-lg">
-                        <span>Total do pedido:</span>
-                        <span className="font-bold">
-                          R$ {(totalCarrinho + (tipoEntrega === "entrega" ? TAXA_ENTREGA : 0)).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-lg">
-                        <span>Valor que você vai pagar:</span>
-                        <span className="font-bold">R$ {Number.parseFloat(valorPago || "0").toFixed(2)}</span>
-                      </div>
-                      <div className="border-t pt-2 mt-2">
-                        <div className="flex justify-between text-xl font-bold">
-                          <span>Troco:</span>
-                          <span className={calcularTroco() >= 0 ? "text-green-600" : "text-red-600"}>
-                            {calcularTroco() === 0
-                              ? "✅ Não precisa de troco"
-                              : calcularTroco() > 0
-                                ? `R$ ${calcularTroco().toFixed(2)}`
-                                : `❌ Falta R$ ${Math.abs(calcularTroco()).toFixed(2)}`}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Dados PIX */}
-          {formaPagamento === "pix" && (
-            <Card className="shadow-lg bg-green-50 border-green-200">
-              <CardContent className="p-6">
-                <h3 className="text-xl font-bold mb-4 text-green-800 flex items-center">📱 Dados PIX</h3>
-                <div className="bg-white border-2 border-green-300 rounded-lg p-4 mb-4">
-                  <div className="space-y-3 text-sm">
-                    <div>
-                      <span className="font-semibold text-gray-600">Chave PIX:</span>
-                      <div className="font-bold text-lg text-green-700">{CHAVE_PIX}</div>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-600">Nome:</span>
-                      <div className="font-semibold text-gray-800">{NOME_PIX}</div>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-600">Banco:</span>
-                      <div className="font-semibold text-gray-800">{BANCO_PIX}</div>
-                    </div>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => {
-                    navigator.clipboard.writeText(CHAVE_PIX)
-                    addToast({
-                      type: "success",
-                      title: "Chave PIX copiada!",
-                      description: "A chave PIX foi copiada para a área de transferência",
-                    })
-                  }}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg mb-3"
-                >
-                  📋 Copiar Chave PIX
-                </Button>
-                <p className="text-center text-sm text-gray-600">
-                  Após fazer o PIX, envie o comprovante junto com o pedido
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Botão Finalizar */}
-          <Button
-            onClick={finalizarPedido}
-            disabled={carregando || (formaPagamento === "dinheiro" && calcularTroco() < 0)}
-            className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-4 text-lg rounded-xl"
-          >
-            {carregando ? "Processando..." : "🚀 Confirmar Pedido"}
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  // TELA DO COMPROVANTE
-  if (telaAtual === "comprovante" && pedidoAtual) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-800 to-gray-900 text-white">
-        <div className="bg-gradient-to-r from-green-600 to-blue-600 p-4 text-white sticky top-0 z-10 shadow-lg">
-          <div className="flex items-center justify-between max-w-6xl mx-auto">
-            <Button
-              variant="ghost"
-              onClick={() => setTelaAtual("inicio")}
-              className="text-white hover:bg-white/20 font-semibold"
-            >
-              ← Início
-            </Button>
-            <h1 className="text-2xl font-bold">Comprovante</h1>
-            <div className="w-20"></div>
-          </div>
-        </div>
-
-        <div className="max-w-2xl mx-auto p-4">
-          <div ref={comprovanteRef} className="bg-white text-black rounded-lg shadow-2xl p-6 space-y-6">
-            {/* Cabeçalho */}
-            <div className="text-center border-b pb-4">
-              <div className="w-16 h-16 mx-auto rounded-full overflow-hidden mb-4">
-                <Image
-                  src="/logo-bebidas-on.png"
-                  alt="Logo"
-                  width={64}
-                  height={64}
-                  className="w-full h-full object-cover"
+            {formaPagamento === "dinheiro" && (
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">Valor Pago</h3>
+                <Input
+                  type="number"
+                  placeholder="Digite o valor pago pelo cliente"
+                  value={valorPago}
+                  onChange={(e) => setValorPago(e.target.value)}
                 />
               </div>
-              <h2 className="text-2xl font-bold text-orange-600">BEBIDAS ON</h2>
-              <p className="text-gray-600">Delivery Premium</p>
-              <p className="text-sm text-gray-500">{TELEFONE_DISPLAY}</p>
-            </div>
+            )}
 
-            {/* Dados do Pedido */}
-            <div className="space-y-2">
-              <h3 className="text-lg font-bold">Dados do Pedido</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="font-semibold">Pedido:</span> #{pedidoAtual.id}
-                </div>
-                <div>
-                  <span className="font-semibold">Data:</span> {pedidoAtual.data}
-                </div>
-                <div>
-                  <span className="font-semibold">Cliente:</span> {pedidoAtual.cliente}
-                </div>
-                <div>
-                  <span className="font-semibold">Tipo:</span>{" "}
-                  {pedidoAtual.tipoEntrega === "entrega" ? "🚚 Entrega" : "🏪 Retirada"}
-                </div>
+            {formaPagamento === "pix" && (
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">Chave PIX</h3>
+                <p className="text-gray-600">
+                  <Zap className="inline w-4 h-4 mr-1" />
+                  {CHAVE_PIX}
+                </p>
+                <p className="text-gray-600">
+                  <Lock className="inline w-4 h-4 mr-1" />
+                  {NOME_PIX}
+                </p>
+                <p className="text-gray-600">
+                  <Key className="inline w-4 h-4 mr-1" />
+                  {BANCO_PIX}
+                </p>
               </div>
-              {pedidoAtual.enderecoEntrega && (
-                <div className="text-sm">
-                  <span className="font-semibold">Endereço:</span> {pedidoAtual.enderecoEntrega}
-                </div>
-              )}
-            </div>
+            )}
 
-            {/* Itens */}
-            <div className="space-y-2">
-              <h3 className="text-lg font-bold">Itens do Pedido</h3>
-              <div className="space-y-2">
-                {pedidoAtual.itens.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <div>
-                      <div className="font-semibold">
-                        {item.quantidade}x {item.bebida.nome}
-                      </div>
-                      <div className="text-sm text-gray-600">R$ {item.bebida.preco.toFixed(2)} cada</div>
-                    </div>
-                    <div className="font-bold">R$ {(item.bebida.preco * item.quantidade).toFixed(2)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Totais */}
-            <div className="space-y-2 border-t pt-4">
-              <div className="flex justify-between">
-                <span>Subtotal:</span>
-                <span>R$ {subtotalItens.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Taxa de entrega:</span>
-                <span>{pedidoAtual.tipoEntrega === "entrega" ? `R$ ${TAXA_ENTREGA.toFixed(2)}` : "R$ 0,00"}</span>
-              </div>
-              <div className="flex justify-between text-xl font-bold text-green-600 border-t pt-2">
-                <span>Total:</span>
-                <span>R$ {pedidoAtual.total.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Pagamento */}
-            <div className="space-y-2 border-t pt-4">
-              <h3 className="text-lg font-bold">Pagamento</h3>
-              <div className="flex justify-between">
-                <span>Forma:</span>
-                <span className="font-semibold">{pedidoAtual.formaPagamento.toUpperCase()}</span>
-              </div>
-              {pedidoAtual.formaPagamento === "dinheiro" && (
-                <>
-                  <div className="flex justify-between">
-                    <span>Valor pago:</span>
-                    <span>R$ {pedidoAtual.valorPago?.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Troco:</span>
-                    <span>R$ {(pedidoAtual.troco || 0).toFixed(2)}</span>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Status */}
-            <div className="text-center bg-yellow-100 p-4 rounded-lg">
-              <p className="font-bold text-yellow-800">⏰ Aguardando confirmação</p>
-              <p className="text-sm text-yellow-700">Seu pedido foi enviado via WhatsApp</p>
-            </div>
-          </div>
-
-          {/* Botões */}
-          <div className="mt-6 space-y-4">
-            <Button
-              onClick={compartilharComprovante}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 text-lg rounded-xl"
-            >
-              📱 Enviar para WhatsApp
-            </Button>
-            <Button
-              onClick={salvarComprovante}
-              disabled={capturandoImagem}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl"
-            >
-              {capturandoImagem ? "Salvando..." : "💾 Salvar Comprovante"}
-            </Button>
-            <Button
-              onClick={() => {
-                setCarrinho([])
-                setEnderecoEntrega("")
-                setValorPago("")
-                setFormaPagamento("pix")
-                setTipoEntrega("retirada")
-                setPedidoAtual(null)
-                setTelaAtual("inicio")
-              }}
-              variant="outline"
-              className="w-full border-white text-white hover:bg-white hover:text-black py-3 rounded-xl"
-            >
-              🏠 Voltar ao Início
+            <Button className="w-full" onClick={finalizarPedido} disabled={carregando}>
+              {carregando ? "Finalizando..." : "Finalizar Pedido"}
             </Button>
           </div>
-        </div>
+        </main>
+
+        <Rodape />
       </div>
     )
   }
 
-  // TELA ADMIN
+  // TELA DE COMPROVANTE
+  if (telaAtual === "comprovante" && pedidoAtual) {
+    return (
+      <div className="min-h-screen bg-gray-200 flex flex-col">
+        <header className="bg-gray-800 text-white py-4">
+          <div className="container mx-auto px-4 flex justify-between items-center">
+            <h1 className="text-xl font-semibold">🎉 Comprovante do Pedido</h1>
+            <div>
+              <Button variant="secondary" onClick={salvarComprovante} disabled={capturandoImagem}>
+                {capturandoImagem ? "Salvando..." : "Salvar Comprovante"}
+              </Button>
+              <Button className="ml-2" onClick={compartilharComprovante}>
+                Enviar para WhatsApp
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <main className="container mx-auto p-4 flex-grow overflow-auto">
+          <div ref={comprovanteRef} className="bg-gray-700 text-white rounded-md p-4 shadow-lg">
+            <h2 className="text-2xl font-bold mb-4 text-center">🍻 Bebidas ON - Comprovante 🍻</h2>
+            <p className="text-gray-300 text-sm text-center">
+              {modoTeste ? "🧪 MODO TESTE ATIVO" : "✅ Pedido confirmado"}
+            </p>
+            <hr className="my-4 border-gray-600" />
+
+            <div className="flex justify-between mb-2">
+              <span className="font-semibold">Pedido:</span>
+              <span>#{pedidoAtual.id}</span>
+            </div>
+            <div className="flex justify-between mb-2">
+              <span className="font-semibold">Data:</span>
+              <span>{pedidoAtual.data}</span>
+            </div>
+
+            <hr className="my-4 border-gray-600" />
+
+            <h3 className="text-lg font-semibold mb-2">Itens do Pedido:</h3>
+            <ul>
+              {pedidoAtual.itens.map((item, index) => (
+                <li key={index} className="flex justify-between mb-1">
+                  <span>
+                    {item.quantidade}x {item.bebida.nome}
+                  </span>
+                  <span>R$ {(item.bebida.preco * item.quantidade).toFixed(2)}</span>
+                </li>
+              ))}
+            </ul>
+
+            <hr className="my-4 border-gray-600" />
+
+            <div className="flex justify-between mb-2">
+              <span className="font-semibold">Subtotal:</span>
+              <span>R$ {subtotalItens.toFixed(2)}</span>
+            </div>
+            {pedidoAtual.tipoEntrega === "entrega" && (
+              <div className="flex justify-between mb-2">
+                <span className="font-semibold">Taxa de Entrega:</span>
+                <span>R$ {TAXA_ENTREGA.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between mb-2">
+              <span className="font-semibold">Total:</span>
+              <span className="text-xl">R$ {pedidoAtual.total.toFixed(2)}</span>
+            </div>
+
+            <hr className="my-4 border-gray-600" />
+
+            <div className="flex justify-between mb-2">
+              <span className="font-semibold">Forma de Pagamento:</span>
+              <span>{pedidoAtual.formaPagamento.toUpperCase()}</span>
+            </div>
+            {pedidoAtual.formaPagamento === "dinheiro" && (
+              <>
+                <div className="flex justify-between mb-2">
+                  <span className="font-semibold">Valor Pago:</span>
+                  <span>R$ {pedidoAtual.valorPago?.toFixed(2)}</span>
+                </div>
+                {pedidoAtual.troco && pedidoAtual.troco > 0 && (
+                  <div className="flex justify-between mb-2">
+                    <span className="font-semibold">Troco:</span>
+                    <span>R$ {pedidoAtual.troco.toFixed(2)}</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            <hr className="my-4 border-gray-600" />
+
+            <p className="text-center text-gray-400 text-sm">
+              Obrigado por comprar conosco!
+              <br />
+              Bebidas ON - {TELEFONE_DISPLAY}
+            </p>
+          </div>
+        </main>
+
+        <footer className="bg-gray-800 text-white py-4">
+          <div className="container mx-auto px-4 text-center">
+            <Button onClick={() => setTelaAtual("inicio")}>Voltar ao Início</Button>
+          </div>
+        </footer>
+      </div>
+    )
+  }
+
+  // TELA DE ADMINISTRAÇÃO
   if (telaAtual === "admin") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-3 sm:p-4 text-white sticky top-0 z-10 shadow-lg">
-          <div className="max-w-6xl mx-auto">
-            {/* Layout Mobile */}
-            <div className="block sm:hidden">
-              <div className="flex items-center justify-between mb-3">
-                <Button
-                  variant="ghost"
-                  onClick={() => setTelaAtual("inicio")}
-                  className="text-white hover:bg-white/20 font-semibold text-sm px-2"
-                >
-                  ← Sair
-                </Button>
-                {modoTeste && <Badge className="bg-yellow-500 text-black text-xs">🧪 TESTE</Badge>}
-              </div>
-
-              <div className="text-center mb-3">
-                <h1 className="text-lg font-bold">🔐 Painel Admin</h1>
-              </div>
-
-              <div className="flex items-center justify-center space-x-4">
-                <div className="text-center">
-                  <div
-                    className={`text-sm font-bold transition-all duration-500 ${lojaAberta ? "text-green-400" : "text-red-400"}`}
-                  >
-                    {lojaAberta ? "🟢 ABERTO" : "🔴 FECHADO"}
-                  </div>
-                  <div className="text-xs text-gray-300">{lojaAberta ? "Aceitando pedidos" : "Pedidos pausados"}</div>
-                </div>
-                <button
-                  onClick={alternarStatusLoja}
-                  disabled={carregando}
-                  className={`relative inline-flex h-8 w-16 items-center rounded-full transition-all duration-500 shadow-lg ${
-                    lojaAberta
-                      ? "bg-gradient-to-r from-green-400 to-green-600 shadow-green-500/50"
-                      : "bg-gradient-to-r from-red-400 to-red-600 shadow-red-500/50"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-6 w-6 transform rounded-full bg-white transition-all duration-500 shadow-lg ${
-                      lojaAberta ? "translate-x-8 rotate-180" : "translate-x-1"
-                    }`}
-                  >
-                    <span
-                      className={`flex items-center justify-center h-full text-xs font-bold transition-all duration-500 ${
-                        lojaAberta ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {lojaAberta ? "✓" : "✕"}
-                    </span>
-                  </span>
-                  {carregando && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Layout Desktop */}
-            <div className="hidden sm:flex items-center justify-between">
-              <Button
-                variant="ghost"
-                onClick={() => setTelaAtual("inicio")}
-                className="text-white hover:bg-white/20 font-semibold"
-              >
-                ← Sair Admin
+      <div className="min-h-screen bg-gray-100">
+        <header className="bg-white shadow">
+          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-gray-900">⚙️ Painel Administrativo</h1>
+            <div className="flex items-center space-x-4">
+              <Button variant="outline" size="icon" onClick={() => setTelaAtual("inicio")}>
+                <Package className="w-5 h-5" />
+                <span>Voltar ao Início</span>
               </Button>
-              <h1 className="text-2xl font-bold">🔐 Painel Administrativo</h1>
-              <div className="flex items-center space-x-4">
-                {modoTeste && <Badge className="bg-yellow-500 text-black">🧪 TESTE</Badge>}
-                <div className="flex items-center space-x-3">
-                  <div className="text-right">
-                    <div
-                      className={`text-lg font-bold transition-all duration-500 ${lojaAberta ? "text-green-400" : "text-red-400"}`}
-                    >
-                      {lojaAberta ? "🟢 ABERTO" : "🔴 FECHADO"}
-                    </div>
-                    <div className="text-xs text-gray-300">{lojaAberta ? "Aceitando pedidos" : "Pedidos pausados"}</div>
-                  </div>
-                  <button
-                    onClick={alternarStatusLoja}
-                    disabled={carregando}
-                    className={`relative inline-flex h-10 w-20 items-center rounded-full transition-all duration-500 transform hover:scale-110 shadow-2xl ${
-                      lojaAberta
-                        ? "bg-gradient-to-r from-green-400 to-green-600 shadow-green-500/50"
-                        : "bg-gradient-to-r from-red-400 to-red-600 shadow-red-500/50"
-                    } hover:shadow-xl`}
-                    style={{
-                      boxShadow: lojaAberta
-                        ? "0 0 20px rgba(34, 197, 94, 0.4), 0 0 40px rgba(34, 197, 94, 0.2)"
-                        : "0 0 20px rgba(239, 68, 68, 0.4), 0 0 40px rgba(239, 68, 68, 0.2)",
-                    }}
-                  >
-                    <span
-                      className={`inline-block h-8 w-8 transform rounded-full bg-white transition-all duration-500 shadow-lg ${
-                        lojaAberta ? "translate-x-10 rotate-180" : "translate-x-1"
-                      }`}
-                      style={{
-                        boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1)",
-                      }}
-                    >
-                      <span
-                        className={`flex items-center justify-center h-full text-sm font-bold transition-all duration-500 ${
-                          lojaAberta ? "text-green-600" : "text-red-600"
-                        }`}
-                      >
-                        {lojaAberta ? "✓" : "✕"}
-                      </span>
-                    </span>
-                    {carregando && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
-                      </div>
-                    )}
-
-                    {/* Efeito de brilho animado */}
-                    <div
-                      className={`absolute inset-0 rounded-full opacity-30 animate-pulse ${
-                        lojaAberta ? "bg-green-300" : "bg-red-300"
-                      }`}
-                    ></div>
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
-        </div>
+        </header>
 
-        <div className="max-w-6xl mx-auto p-4">
-          {/* Dashboard Cards - SEM LIMITES */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card className="shadow-lg bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl mb-2">📦</div>
-                <h3 className="text-lg font-bold text-blue-800">Produtos</h3>
-                <p className="text-3xl font-bold text-blue-600">{bebidas.length}</p>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-lg bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl mb-2">🏷️</div>
-                <h3 className="text-lg font-bold text-purple-800">Categorias</h3>
-                <p className="text-3xl font-bold text-purple-600">{categorias.length}</p>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-lg bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl mb-2">📋</div>
-                <h3 className="text-lg font-bold text-green-800">Pedidos</h3>
-                <p className="text-3xl font-bold text-green-600">{pedidosFiltrados.length}</p>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-lg bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl mb-2">💰</div>
-                <h3 className="text-lg font-bold text-yellow-800">Vendas Totais</h3>
-                <p className="text-2xl font-bold text-yellow-600">
-                  R$ {pedidosFiltrados.reduce((total, pedido) => total + pedido.total, 0).toFixed(2)}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Navigation Tabs */}
-          <div className="flex space-x-1 mb-6 bg-white rounded-lg p-1 shadow-lg">
+        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="mb-4 flex space-x-4">
             <Button
-              variant={abaAdmin === "categorias" ? "default" : "ghost"}
+              variant={abaAdmin === "categorias" ? "default" : "outline"}
               onClick={() => setAbaAdmin("categorias")}
-              className="flex-1"
             >
-              🏷️ Categorias
+              Categorias
             </Button>
-            <Button
-              variant={abaAdmin === "produtos" ? "default" : "ghost"}
-              onClick={() => setAbaAdmin("produtos")}
-              className="flex-1"
-            >
-              📦 Produtos
+            <Button variant={abaAdmin === "produtos" ? "default" : "outline"} onClick={() => setAbaAdmin("produtos")}>
+              Produtos
             </Button>
-            <Button
-              variant={abaAdmin === "pedidos" ? "default" : "ghost"}
-              onClick={() => setAbaAdmin("pedidos")}
-              className="flex-1"
-            >
-              📋 Pedidos
+            <Button variant={abaAdmin === "pedidos" ? "default" : "outline"} onClick={() => setAbaAdmin("pedidos")}>
+              Pedidos
             </Button>
           </div>
 
-          {/* ABA CATEGORIAS */}
+          {/* ABA DE CATEGORIAS */}
           {abaAdmin === "categorias" && (
-            <div className="space-y-6">
-              {/* Gerenciar Categorias Header */}
-              <Card className="shadow-lg bg-gradient-to-r from-orange-50 to-yellow-50">
-                <CardContent className="p-6">
-                  <h2 className="text-2xl font-bold text-orange-800 mb-4">🏷️ Gerenciar Categorias</h2>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Gerenciar Categorias</h2>
 
-                  {/* Adicionar Nova Categoria */}
-                  <div className="bg-white rounded-lg p-4 border-2 border-orange-200 mb-6">
-                    <h3 className="text-lg font-bold mb-4 text-orange-700">➕ Adicionar Nova Categoria</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <Input
-                        placeholder="Nome da Categoria *"
-                        value={novaCategoria.nome}
-                        onChange={(e) => setNovaCategoria({ ...novaCategoria, nome: e.target.value })}
-                        className="border-orange-300 focus:border-orange-500"
-                      />
-                      <Input
-                        placeholder="Descrição (opcional)"
-                        value={novaCategoria.descricao || ""}
-                        onChange={(e) => setNovaCategoria({ ...novaCategoria, descricao: e.target.value })}
-                        className="border-orange-300 focus:border-orange-500"
-                      />
-                      <select
-                        value={novaCategoria.icone}
-                        onChange={(e) => setNovaCategoria({ ...novaCategoria, icone: e.target.value })}
-                        className="px-3 py-2 border border-orange-300 rounded-md focus:border-orange-500"
-                      >
-                        {ICONES_CATEGORIAS.map((icone) => (
-                          <option key={icone.valor} value={icone.valor}>
-                            {icone.nome}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={novaCategoria.cor}
-                        onChange={(e) => setNovaCategoria({ ...novaCategoria, cor: e.target.value })}
-                        className="px-3 py-2 border border-orange-300 rounded-md focus:border-orange-500"
-                      >
-                        {CORES_CATEGORIAS.map((cor) => (
-                          <option key={cor.valor} value={cor.valor}>
-                            {cor.nome}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <Button
-                      onClick={adicionarNovaCategoria}
-                      disabled={carregando}
-                      className="mt-4 bg-purple-600 hover:bg-purple-700 text-white"
-                    >
-                      {carregando ? "Salvando..." : "➕ Adicionar Categoria"}
-                    </Button>
-                  </div>
-
-                  {/* Categorias Existentes */}
-                  <div>
-                    <h3 className="text-lg font-bold mb-4 text-gray-700">📂 Categorias Existentes</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {categorias.map((categoria) => {
-                        const IconeComponent = getIconeCategoria(categoria.icone)
-                        const corInfo = getCorCategoria(categoria.cor)
-                        const produtosCount = bebidas.filter((b) => b.categoria_id === categoria.id).length
-
-                        return (
-                          <Card key={categoria.id} className={`shadow-lg ${corInfo.classeBg} border-2`}>
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center space-x-2">
-                                  <div className={`p-2 rounded-full ${corInfo.classe} text-white`}>
-                                    <IconeComponent className="w-5 h-5" />
-                                  </div>
-                                  <div>
-                                    <h4 className={`font-bold ${corInfo.classeTexto}`}>{categoria.nome}</h4>
-                                    <p className="text-sm text-gray-600">{produtosCount} produtos</p>
-                                    <p className="text-xs text-gray-500">ID: {categoria.id}</p>
-                                  </div>
-                                </div>
-                                <div className="flex space-x-1">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setEditandoCategoria(categoria)}
-                                    className="h-8 w-8 p-0 hover:bg-blue-50"
-                                  >
-                                    ✏️
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => excluirCategoria(categoria.id)}
-                                    className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
-                                  >
-                                    🗑️
-                                  </Button>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Modal Editar Categoria - CORRIGIDO */}
-              {editandoCategoria && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                  <Card className="shadow-lg border-2 border-blue-500 bg-blue-50 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                    <CardContent className="p-6">
-                      <h3 className="text-xl font-bold mb-4 text-blue-800">✏️ Editando: {editandoCategoria.nome}</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Input
-                          placeholder="Nome da categoria"
-                          value={editandoCategoria.nome}
-                          onChange={(e) => setEditandoCategoria({ ...editandoCategoria, nome: e.target.value })}
-                          className="border-blue-300 focus:border-blue-500"
-                        />
-                        <select
-                          value={editandoCategoria.icone}
-                          onChange={(e) => setEditandoCategoria({ ...editandoCategoria, icone: e.target.value })}
-                          className="px-3 py-2 border border-blue-300 rounded-md focus:border-blue-500"
-                        >
-                          {ICONES_CATEGORIAS.map((icone) => (
-                            <option key={icone.valor} value={icone.valor}>
-                              {icone.nome}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={editandoCategoria.cor}
-                          onChange={(e) => setEditandoCategoria({ ...editandoCategoria, cor: e.target.value })}
-                          className="px-3 py-2 border border-blue-300 rounded-md focus:border-blue-500"
-                        >
-                          {CORES_CATEGORIAS.map((cor) => (
-                            <option key={cor.valor} value={cor.valor}>
-                              {cor.nome}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex space-x-2 mt-4">
-                        <Button
-                          onClick={editarCategoria}
-                          disabled={carregando}
-                          className="bg-blue-600 hover:bg-blue-700"
-                        >
-                          {carregando ? "Salvando..." : "💾 Salvar"}
-                        </Button>
-                        <Button variant="outline" onClick={() => setEditandoCategoria(null)}>
-                          ❌ Cancelar
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Keep the existing ABA PRODUTOS and ABA PEDIDOS sections unchanged */}
-          {abaAdmin === "produtos" && (
-            <div className="space-y-6">
-              {/* Formulário Novo Produto */}
-              <Card className="shadow-lg">
-                <CardContent className="p-6">
-                  <h3 className="text-xl font-bold mb-4">➕ Novo Produto</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input
-                      placeholder="Nome do produto"
-                      value={novoItem.nome}
-                      onChange={(e) => setNovoItem({ ...novoItem, nome: e.target.value })}
-                    />
-                    <Input
-                      placeholder="Preço (ex: 4.50)"
-                      type="number"
-                      step="0.01"
-                      value={novoItem.preco}
-                      onChange={(e) => setNovoItem({ ...novoItem, preco: e.target.value })}
-                    />
-                    <Input
-                      placeholder="Descrição"
-                      value={novoItem.descricao}
-                      onChange={(e) => setNovoItem({ ...novoItem, descricao: e.target.value })}
-                    />
-                    <Input
-                      placeholder="Estoque"
-                      type="number"
-                      value={novoItem.estoque}
-                      onChange={(e) => setNovoItem({ ...novoItem, estoque: e.target.value })}
-                    />
-                    <select
-                      value={novoItem.categoria_id}
-                      onChange={(e) => setNovoItem({ ...novoItem, categoria_id: e.target.value })}
-                      className="px-3 py-2 border border-gray-300 rounded-md"
-                    >
-                      <option value="">Selecione uma categoria</option>
-                      {categorias.map((categoria) => (
-                        <option key={categoria.id} value={categoria.id}>
-                          {categoria.nome}
-                        </option>
-                      ))}
-                    </select>
-                    <Input
-                      placeholder="URL da imagem"
-                      value={novoItem.imagem}
-                      onChange={(e) => setNovoItem({ ...novoItem, imagem: e.target.value })}
-                    />
-                  </div>
-                  <div className="mt-4">
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="mb-2" />
-                  </div>
-                  <Button
-                    onClick={adicionarNovaBebida}
-                    disabled={carregando}
-                    className="mt-4 bg-green-600 hover:bg-green-700"
-                  >
-                    {carregando ? "Salvando..." : "➕ Adicionar Produto"}
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Busca de Produtos */}
-              <Card className="shadow-lg">
-                <CardContent className="p-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <Input
-                      type="text"
-                      placeholder="Buscar produtos..."
-                      value={buscaProdutos}
-                      onChange={(e) => setBuscaProdutos(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Lista de Produtos */}
-              <Card className="shadow-lg">
-                <CardContent className="p-6">
-                  <h3 className="text-xl font-bold mb-4">🍻 Produtos ({produtosFiltrados.length}) </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {produtosFiltrados.map((bebida) => (
-                      <div key={bebida.id} className="border rounded-lg p-4 space-y-3">
-                        <div className="w-full h-32 rounded-lg overflow-hidden bg-gray-100">
-                          <Image
-                            src={bebida.imagem || "/placeholder.svg?height=128&width=200&text=Bebida"}
-                            alt={bebida.nome}
-                            width={200}
-                            height={128}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
+              {/* LISTA DE CATEGORIAS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                {categorias.map((categoria) => (
+                  <Card key={categoria.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold text-gray-800">{categoria.nome}</h3>
                         <div>
-                          <h4 className="font-bold text-sm">{bebida.nome}</h4>
-                          <p className="text-xs text-gray-600 line-clamp-2">{bebida.descricao}</p>
-                          <div className="flex justify-between items-center mt-2">
-                            <span className="font-bold text-green-600">R$ {bebida.preco.toFixed(2)}</span>
-                            <Badge className={getStatusEstoque(bebida.estoque).cor}>{bebida.estoque}</Badge>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Input
-                            type="number"
-                            value={bebida.estoque}
-                            onChange={(e) => atualizarEstoque(bebida.id, Number.parseInt(e.target.value) || 0)}
-                            className="flex-1 h-8 text-xs"
-                            min="0"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setEditandoItem(bebida)}
-                            className="h-8 w-8 p-0"
-                          >
-                            ✏️
+                          <Button variant="ghost" size="icon" onClick={() => setEditandoCategoria(categoria)}>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path d="M21.731 2.269a2.625 2.625 0 0 0-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 0 0 0-3.712ZM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 0 0-1.32 2.214l-.08 2.685a.75.75 0 0 0 .933.933l2.685-.08a5.25 5.25 0 0 0 2.214-1.32L19.513 8.199Z" />
+                            </svg>
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => excluirBebida(bebida.id)}
-                            className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
-                          >
-                            🗑️
+                          <Button variant="ghost" size="icon" onClick={() => excluirCategoria(categoria.id)}>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M16.5 5.25a.75.75 0 0 1 .75.75V6h-1.5V5.25a.75.75 0 0 1 .75-.75ZM14.25 6a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.75h-3V6ZM6 19c0 1.105.269 2.059.75 2.815a8.203 8.203 0 0 0 5.25 0c.481-.756.75-1.71.75-2.815V9H6v10Zm8.25-13.5a.75.75 0 0 1 .75.75v.75h-3V6a.75.75 0 0 1 .75-.75ZM8.494 5.17a3.75 3.75 0 0 1 5.012 0l.593.593a.75.75 0 0 1-1.06 1.06l-.593-.593a2.25 2.25 0 0 0-3.009 0l-.594.593a.75.75 0 0 1-1.06-1.06l.594-.593ZM10.5 3a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75Zm-4.5 0a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75ZM18 9.75h-1.125l-.5-1.5H7.625l-.5 1.5H6a.75.75 0 0 1-.75-.75V8.25h13.5v.75a.75.75 0 0 1-.75.75Z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
                           </Button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Modal Editar Produto - CORRIGIDO */}
-              {editandoItem && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                  <Card className="shadow-lg border-2 border-blue-500 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-                    <CardContent className="p-6">
-                      <h3 className="text-xl font-bold mb-4">✏️ Editando: {editandoItem.nome}</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input
-                          placeholder="Nome do produto"
-                          value={editandoItem.nome}
-                          onChange={(e) => setEditandoItem({ ...editandoItem, nome: e.target.value })}
-                        />
-                        <Input
-                          placeholder="Preço"
-                          type="number"
-                          step="0.01"
-                          value={editandoItem.preco.toString()}
-                          onChange={(e) =>
-                            setEditandoItem({ ...editandoItem, preco: Number.parseFloat(e.target.value) || 0 })
-                          }
-                        />
-                        <Input
-                          placeholder="Descrição"
-                          value={editandoItem.descricao || ""}
-                          onChange={(e) => setEditandoItem({ ...editandoItem, descricao: e.target.value })}
-                        />
-                        <Input
-                          placeholder="Estoque"
-                          type="number"
-                          value={editandoItem.estoque.toString()}
-                          onChange={(e) =>
-                            setEditandoItem({ ...editandoItem, estoque: Number.parseInt(e.target.value) || 0 })
-                          }
-                        />
-                        <select
-                          value={editandoItem.categoria_id.toString()}
-                          onChange={(e) =>
-                            setEditandoItem({ ...editandoItem, categoria_id: Number.parseInt(e.target.value) })
-                          }
-                          className="px-3 py-2 border border-gray-300 rounded-md"
+                      <p className="text-sm text-gray-600">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-4 h-4 inline mr-1"
                         >
-                          {categorias.map((categoria) => (
-                            <option key={categoria.id} value={categoria.id.toString()}>
-                              {categoria.nome}
-                            </option>
-                          ))}
-                        </select>
-                        <Input
-                          placeholder="URL da imagem"
-                          value={editandoItem.imagem}
-                          onChange={(e) => setEditandoItem({ ...editandoItem, imagem: e.target.value })}
-                        />
-                      </div>
-                      <div className="mt-4">
-                        <input type="file" accept="image/*" onChange={handleImageUpload} className="mb-2" />
-                      </div>
-                      <div className="flex space-x-2 mt-4">
-                        <Button onClick={editarBebida} disabled={carregando} className="bg-blue-600 hover:bg-blue-700">
-                          {carregando ? "Salvando..." : "💾 Salvar"}
-                        </Button>
-                        <Button variant="outline" onClick={() => setEditandoItem(null)}>
-                          ❌ Cancelar
-                        </Button>
-                      </div>
+                          <path d="M19.5 2.25a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v1.125a2.25 2.25 0 0 0 0 4.5V19.5a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V7.875a2.25 2.25 0 0 0 0-4.5V2.25ZM4.5 6a.75.75 0 0 1 .75-.75h14.25a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75-.75H5.25a.75.75 0 0 1-.75-.75V6ZM18 10.5a.75.75 0 0 1 .75.75v5.25a.75.75 0 0 1-.75.75H6a.75.75 0 0 1-.75-.75v-5.25a.75.75 0 0 1 .75-.75h12Z" />
+                        </svg>
+                        {categoria.nome}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-4 h-4 inline mr-1"
+                        >
+                          <path d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v7.5a.75.75 0 0 0 .75.75h10.5a.75.75 0 0 0 .75-.75v-7.5a3 3 0 0 0-3-3v-3a5.25 5.25 0 0 0-5.25-5.25ZM12.75 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM7.5 12a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v5.25H7.5V12Z" />
+                        </svg>
+                        {categoria.icone}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-4 h-4 inline mr-1"
+                        >
+                          <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.924 2.25 12.767 2.25 9.25c0-5.103 4.14-9.24 9.24-9.24 4.767 0 8.89 3.637 9.24 8.362l.008.003.022.012a15.247 15.247 0 0 1 .383.218 25.18 25.18 0 0 1 4.244 3.17c3.002 3.672 5.439 6.828 5.439 10.33 0 5.103-4.14 9.24-9.24 9.24-4.767 0-8.89-3.637-9.24-8.362l-.008-.003-.022-.012-.383-.218-4.244-3.17C5.212 6.768 2.775 3.612 2.775.107 17.225 3.612 21.662 6.768 21.662 9.25c0 3.512-2.437 6.668-5.439 10.33a25.18 25.18 0 0 1-4.244 3.17.75.75 0 0 1-.383.218l-.022.012Z" />
+                        </svg>
+                        {categoria.cor}
+                      </p>
                     </CardContent>
                   </Card>
+                ))}
+              </div>
+
+              {/* FORMULÁRIO DE NOVA CATEGORIA */}
+              <div className="bg-white shadow-md rounded-md p-4">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">Adicionar Nova Categoria</h3>
+                <div className="mb-2">
+                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="nome">
+                    Nome:
+                  </label>
+                  <Input
+                    type="text"
+                    id="nome"
+                    placeholder="Nome da categoria"
+                    value={novaCategoria.nome}
+                    onChange={(e) => setNovaCategoria({ ...novaCategoria, nome: e.target.value })}
+                  />
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* ABA PEDIDOS */}
-          {abaAdmin === "pedidos" && (
-            <div className="space-y-6">
-              {/* Filtro por Data */}
-              <Card className="shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-4">
-                    <label className="text-sm font-medium text-gray-700">Filtrar por período:</label>
-                    <select
-                      value={filtroData}
-                      onChange={(e) => setFiltroData(e.target.value as "todos" | "semana" | "mes" | "ano")}
-                      className="px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500"
-                    >
-                      <option value="todos">Todo período</option>
-                      <option value="semana">Última semana</option>
-                      <option value="mes">Último mês</option>
-                      <option value="ano">Último ano</option>
-                    </select>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="shadow-lg">
-                <CardContent className="p-6">
-                  <h3 className="text-xl font-bold mb-4">📋 Pedidos ({pedidosFiltrados.length}) - 🔥 SEM LIMITE</h3>
-                  <div className="space-y-4">
-                    {pedidosFiltrados.map((pedido) => (
-                      <div key={pedido.id} className="border rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-bold">Pedido #{pedido.id}</h4>
-                            <p className="text-sm text-gray-600">{pedido.data}</p>
-                            <p className="text-sm">Cliente: {pedido.cliente}</p>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-green-600 text-lg">R$ {pedido.total.toFixed(2)}</div>
-                            <Badge className="bg-yellow-500 text-black">{pedido.status}</Badge>
-                          </div>
-                        </div>
-                        <div className="text-sm">
-                          <strong>Tipo:</strong> {pedido.tipoEntrega === "entrega" ? "🚚 Entrega" : "🏪 Retirada"}
-                          {pedido.enderecoEntrega && (
-                            <div>
-                              <strong>Endereço:</strong> {pedido.enderecoEntrega}
-                            </div>
-                          )}
-                          <div>
-                            <strong>Pagamento:</strong> {pedido.formaPagamento.toUpperCase()}
-                          </div>
-                        </div>
-                        <div className="text-sm">
-                          <strong>Itens:</strong>
-                          <ul className="ml-4 mt-1">
-                            {pedido.itens.map((item, index) => (
-                              <li key={index}>
-                                {item.quantidade}x {item.bebida.nome} - R${" "}
-                                {(item.bebida.preco * item.quantidade).toFixed(2)}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
+                <div className="mb-2">
+                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="icone">
+                    Ícone:
+                  </label>
+                  <select
+                    id="icone"
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    value={novaCategoria.icone}
+                    onChange={(e) => setNovaCategoria({ ...novaCategoria, icone: e.target.value })}
+                  >
+                    {ICONES_CATEGORIAS.map((icone) => (
+                      <option key={icone.valor} value={icone.valor}>
+                        {icone.nome}
+                      </option>
                     ))}
-                    {pedidos.length === 0 && (
-                      <div className="text-center py-8 text-gray-500">
-                        <div className="text-4xl mb-2">📋</div>
-                        <p>Nenhum pedido encontrado</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  // TELA DO CARDÁPIO (padrão)
-  if (carregandoInicial) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-orange-600 font-semibold">Carregando cardápio...</p>
-        </div>
-      </div>
-    )
-  }
-  return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <div className="bg-gradient-to-r from-orange-400 via-orange-500 to-yellow-500 p-4 text-white sticky top-0 z-10 shadow-lg">
-        <div className="flex items-center justify-between max-w-6xl mx-auto">
-          <Button
-            variant="ghost"
-            onClick={() => setTelaAtual("inicio")}
-            className="text-white hover:bg-white/20 font-semibold hover-lift"
-          >
-            ← Início
-          </Button>
-          <div className="flex items-center space-x-3">
-            <div
-              className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/30 cursor-pointer hover-lift animate-logo-suave"
-              onDoubleClick={acessoAdmin}
-            >
-              <Image
-                src="/logo-bebidas-on.png"
-                alt="Logo"
-                width={40}
-                height={40}
-                className="w-full h-full object-cover animate-float"
-              />
-            </div>
-            <div className="text-center">
-              <h1 className="text-2xl font-bold">Cardápio</h1>
-              {modoTeste && <Badge className="bg-yellow-500 text-black text-xs">🧪 DEMO</Badge>}
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            onClick={() => setTelaAtual("carrinho")}
-            className="text-white hover:bg-white/20 relative font-semibold hover-lift"
-            disabled={!lojaAberta}
-          >
-            <ShoppingCart className="w-6 h-6 mr-2" />
-            <span className="hidden sm:inline">Carrinho</span>
-            {totalItens > 0 && (
-              <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center rounded-full animate-bounce">
-                {totalItens}
-              </Badge>
-            )}
-          </Button>
-        </div>
-      </div>
-      {!lojaAberta && (
-        <div className="bg-gradient-to-r from-orange-100 to-yellow-50 border-l-4 border-orange-500 p-4 mx-4 mt-4 rounded-lg shadow-lg animate-pulse">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm">⏰</span>
+                  </select>
+                </div>
+                <div className="mb-2">
+                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="cor">
+                    Cor:
+                  </label>
+                  <select
+                    id="cor"
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    value={novaCategoria.cor}
+                    onChange={(e) => setNovaCategoria({ ...novaCategoria, cor: e.target.value })}
+                  >
+                    {CORES_CATEGORIAS.map((cor) => (
+                      <option key={cor.valor} value={cor.valor}>
+                        {cor.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Button className="w-full" onClick={adicionarNovaCategoria} disabled={carregando}>
+                  {carregando ? "Adicionando..." : "Adicionar Categoria"}
+                </Button>
               </div>
             </div>
-            <div className="ml-3">
-              <p className="text-orange-800 font-bold">
-                Loja Fechada: Não estamos fazendo pedidos no momento. Volte mais tarde!
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* AQUI: Adicione bg-white rounded-lg shadow-inner para o fundo do cardápio */}
-      <div className="flex-1 max-w-6xl mx-auto p-4 bg-white rounded-lg shadow-inner">
-        {/* Barra de Busca */}
-        <div className="mb-6">
-          <div className="relative max-w-md mx-auto">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          {/* ABA DE PRODUTOS */}
+          {abaAdmin === "produtos" && (
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Gerenciar Produtos</h2>
+
+              {/* BARRA DE BUSCA */}
+              <div className="mb-4 flex items-center space-x-2">
+                <Input
+                  type="search"
+                  placeholder="Buscar produto..."
+                  value={buscaProdutos}
+                  onChange={(e) => setBuscaProdutos(e.target.value)}
+                />
+                <Search className="w-5 h-5 text-gray-500" />
+              </div>
+
+              {/* LISTA DE PRODUTOS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                {produtosFiltrados.map((bebida) => (
+                  <Card key={bebida.id}>
+                    <CardContent className="p-4">
+                      <div className="relative">
+                        <Image
+                          src={bebida.imagem || "/placeholder.svg"}
+                          alt={bebida.nome}
+                          width={300}
+                          height={200}
+                          className="rounded-md object-cover w-full h-48"
+                        />
+                        <Badge className="absolute top-2 right-2" variant="secondary">
+                          R$ {bebida.preco.toFixed(2)}
+                        </Badge>
+                      </div>
+                      <h3 className="mt-2 text-lg font-semibold text-gray-800">{bebida.nome}</h3>
+                      <p className="text-sm text-gray-600">{bebida.descricao}</p>
+                      <div className="mt-2 flex items-center justify-between">
+                        <Badge className={getStatusEstoque(bebida.estoque).cor}>
+                          {getStatusEstoque(bebida.estoque).texto}
+                        </Badge>
+                        <div className="flex space-x-2">
+                          <Button variant="ghost" size="icon" onClick={() => setEditandoItem(bebida)}>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path d="M21.731 2.269a2.625 2.625 0 0 0-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 0 0 0-3.712ZM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 0 0-1.32 2.214l-.08 2.685a.75.75 0 0 0 .933.933l2.685-.08a5.25 5.25 0 0 0 2.214-1.32L19.513 8.199Z" />
+                            </svg>
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => excluirBebida(bebida.id)}>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M16.5 5.25a.75.75 0 0 1 .75.75V6h-1.5V5.25a.75.75 0 0 1 .75-.75ZM14.25 6a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.75h-3V6ZM6 19c0 1.105.269 2.059.75 2.815a8.203 8.203 0 0 0 5.25 0c.481-.756.75-1.71.75-2.815V9H6v10Zm8.25-13.5a.75.75 0 0 1 .75.75v.75h-3V6a.75.75 0 0 1 .75-.75ZM8.494 5.17a3.75 3.75 0 0 1 5.012 0l.593.593a.75.75 0 0 1-1.06 1.06l-.593-.593a2.25 2.25 0 0 0-3.009 0l-.594.593a.75.75 0 0 1-1.06-1.06l.594-.593ZM10.5 3a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75Zm-4.5 0a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75ZM18 9.75h-1.125l-.5-1.5H7.625l-.5 1.5H6a.75.75 0 0 1-.75-.75V8.25h13.5v.75a.75.75 0 0 1-.75.75Z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* FORMULÁRIO DE NOVO PRODUTO */}
+              <div className="bg-white shadow-md rounded-md p-4">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">Adicionar Novo Produto</h3>
+                <div className="mb-2">
+                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="nome">
+                    Nome:
+                  </label>
+                  <Input
+                    type="text"
+                    id="nome"
+                    placeholder="Nome do produto"
+                    value={novoItem.nome}
+                    onChange={(e) => setNovoItem({ ...novoItem, nome: e.target.value })}
+                  />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="descricao">
+                    Descrição:
+                  </label>
+                  <Input
+                    type="text"
+                    id="descricao"
+                    placeholder="Descrição do produto"
+                    value={novoItem.descricao}
+                    onChange={(e) => setNovoItem({ ...novoItem, descricao: e.target.value })}
+                  />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="preco">
+                    Preço:
+                  </label>
+                  <Input
+                    type="number"
+                    id="preco"
+                    placeholder="Preço do produto"
+                    value={novoItem.preco}
+                    onChange={(e) => setNovoItem({ ...novoItem, preco: e.target.value })}
+                  />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="categoria_id">
+                    Categoria:
+                  </label>
+                  <select
+                    id="categoria_id"
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    value={novoItem.categoria_id}
+                    onChange={(e) => setNovoItem({ ...novoItem, categoria_id: e.target.value })}
+                  >
+                    <option value="">Selecione uma categoria</option>
+                    {categorias.map((categoria) => (
+                      <option key={categoria.id} value={categoria.id}>
+                        {categoria.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mb-2">
+                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="estoque">
+                    Estoque:
+                  </label>
+                  <Input
+                    type="number"
+                    id="estoque"
+                    placeholder="Estoque do produto"
+                    value={novoItem.estoque}
+                    onChange={(e) => setNovoItem({ ...novoItem, estoque: e.target.value })}
+                  />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="imagem">
+                    Imagem:
+                  </label>
+                  <Input type="file" id="imagem" accept="image/*" onChange={handleImageUpload} />
+                </div>
+                <Button className="w-full" onClick={adicionarNovaBebida} disabled={carregando}>
+                  {carregando ? "Adicionando..." : "Adicionar Produto"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ABA DE PEDIDOS */}
+          {abaAdmin === "pedidos" && (
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Gerenciar Pedidos</h2>
+
+              {/* FILTRO DE DATA */}
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">Filtrar por Data</h3>
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      value="todos"
+                      checked={filtroData === "todos"}
+                      onChange={() => setFiltroData("todos")}
+                      className="focus:ring-0"
+                    />
+                    <span>Todos</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      value="semana"
+                      checked={filtroData === "semana"}
+                      onChange={() => setFiltroData("semana")}
+                      className="focus:ring-0"
+                    />
+                    <span>Última Semana</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      value="mes"
+                      checked={filtroData === "mes"}
+                      onChange={() => setFiltroData("mes")}
+                      className="focus:ring-0"
+                    />
+                    <span>Último Mês</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      value="ano"
+                      checked={filtroData === "ano"}
+                      onChange={() => setFiltroData("ano")}
+                      className="focus:ring-0"
+                    />
+                    <span>Último Ano</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* LISTA DE PEDIDOS */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        ID
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Data
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Pagamento
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Entrega
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {pedidosFiltrados.map((pedido) => (
+                      <tr key={pedido.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pedido.id}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pedido.data}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          R$ {pedido.total.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {pedido.formaPagamento.toUpperCase()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {pedido.tipoEntrega === "entrega" ? "Entrega" : "Retirada"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pedido.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </main>
+
+        <Rodape />
+      </div>
+    )
+  }
+
+  // MODAL DE SENHA
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div className="mt-3 text-center">
+          <h3 className="text-lg leading-6 font-medium text-gray-900">Acesso Administrativo</h3>
+          <div className="mt-2 px-7 py-3">
             <Input
-              type="text"
-              placeholder="Buscar bebidas..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="pl-10 py-3 rounded-xl border-orange-300 focus:border-orange-500"
+              type="password"
+              placeholder="Digite a senha"
+              value={senhaInput}
+              onChange={(e) => setSenhaInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  processarSenha()
+                }
+              }}
             />
           </div>
-        </div>
-
-        {/* Filtros de Categoria */}
-        <div className="flex flex-wrap gap-3 mb-6 justify-center overflow-x-auto pb-2">
-          <Button
-            variant={categoriaFiltro === "todas" ? "default" : "outline"}
-            onClick={() => setCategoriaFiltro("todas")}
-            className="px-4 py-2 hover-lift transition-all duration-300 whitespace-nowrap"
-          >
-            Todas
-          </Button>
-          {categorias.map((categoria) => {
-            const IconeComponent = getIconeCategoria(categoria.icone)
-            const corInfo = getCorCategoria(categoria.cor)
-
-            return (
-              <Button
-                key={categoria.id}
-                variant={categoriaFiltro === categoria.id ? "default" : "outline"}
-                onClick={() => setCategoriaFiltro(categoria.id)}
-                className={`px-4 py-2 hover-lift transition-all duration-300 whitespace-nowrap ${
-                  categoriaFiltro === categoria.id
-                    ? `${corInfo.classe} text-white hover:${corInfo.classe}/90`
-                    : `border-2 ${corInfo.classeTexto} hover:${corInfo.classeBg}`
-                }`}
-              >
-                <IconeComponent className="w-4 h-4 mr-2" />
-                {categoria.nome}
-              </Button>
-            )
-          })}
-        </div>
-
-        {/* Lista de Bebidas */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {bebidasFiltradas.map((bebida, index) => {
-            const IconeComponent = bebida.categoria ? getIconeCategoria(bebida.categoria.icone) : Package
-            const corInfo = bebida.categoria ? getCorCategoria(bebida.categoria.cor) : getCorCategoria("amber")
-
-            return (
-              <Card
-                key={bebida.id}
-                className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50 hover-lift transition-all duration-300 hover:shadow-xl animate-fadeInUp"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <CardContent className="p-6">
-                  <div className="relative mb-4">
-                    <div className="w-full h-48 rounded-lg overflow-hidden bg-gray-100">
-                      <Image
-                        src={bebida.imagem || "/placeholder.svg?height=200&width=300&text=Bebida"}
-                        alt={bebida.nome}
-                        width={300}
-                        height={200}
-                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
-                      />
-                    </div>
-                    <div className="absolute top-2 right-2">
-                      <Badge className={`${getStatusEstoque(bebida.estoque).cor} text-white animate-pulse`}>
-                        {bebida.estoque === 0 ? "Esgotado" : bebida.estoque <= 5 ? `${bebida.estoque}` : "OK"}
-                      </Badge>
-                    </div>
-                    {!lojaAberta && (
-                      <div className="absolute top-2 left-2">
-                        <Badge className="bg-orange-500 text-white animate-pulse">FECHADO</Badge>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <h3 className="font-bold text-xl text-gray-800 mb-1 leading-tight break-words">{bebida.nome}</h3>
-                      {bebida.descricao && <p className="text-gray-600 text-sm line-clamp-2">{bebida.descricao}</p>}
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xl font-bold text-green-600">R$ {bebida.preco.toFixed(2)}</span>
-                        {bebida.categoria && (
-                          <Badge className={`${corInfo.classeBg} ${corInfo.classeTexto} flex items-center space-x-1`}>
-                            <IconeComponent className="w-3 h-3" />
-                            <span className="hidden md:inline">{bebida.categoria.nome}</span>
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Seletor de Quantidade */}
-                    {bebida.estoque > 0 && (
-                      <div className="flex items-center justify-center space-x-2 bg-gray-50 rounded-lg p-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            setQuantidadeSelecionada(bebida.id, Math.max(1, getQuantidadeSelecionada(bebida.id) - 1))
-                          }
-                          className="h-8 w-8 p-0 border-orange-300 hover:bg-orange-100"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </Button>
-                        <span className="font-bold text-lg w-8 text-center">{getQuantidadeSelecionada(bebida.id)}</span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            setQuantidadeSelecionada(
-                              bebida.id,
-                              Math.min(bebida.estoque, getQuantidadeSelecionada(bebida.id) + 1),
-                            )
-                          }
-                          className="h-8 w-8 p-0 border-orange-300 hover:bg-orange-100"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    )}
-
-                    <Button
-                      onClick={() => {
-                        if (!lojaAberta) {
-                          addToast({
-                            type: "warning",
-                            title: "🏪 Loja Fechada!",
-                            description: "Não estamos aceitando pedidos no momento.",
-                          })
-                          return
-                        }
-                        adicionarAoCarrinho(bebida, getQuantidadeSelecionada(bebida.id))
-                      }}
-                      disabled={bebida.estoque === 0}
-                      className={`w-full px-2 py-2 rounded-xl font-semibold text-[10px] sm:text-xs transition-all duration-200 hover-lift flex items-center justify-center gap-1 whitespace-nowrap ${
-                        bebida.estoque === 0
-                          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                          : !lojaAberta
-                            ? "bg-gradient-to-r from-orange-400 to-yellow-500 hover:from-orange-500 hover:to-yellow-600 text-white shadow-lg hover:shadow-xl"
-                            : "bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white shadow-lg hover:shadow-xl animate-glow"
-                      }`}
-                    >
-                      {bebida.estoque === 0 ? (
-                        "❌ Esgotado"
-                      ) : !lojaAberta ? (
-                        "🏪 Loja Fechada"
-                      ) : (
-                        <>
-                          <Plus className="w-3 h-3" />
-                          <span>Adicionar ao Carrinho</span>
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-
-        {bebidasFiltradas.length === 0 && (
-          <div className="text-center py-16">
-            <div className="bg-gradient-to-br from-orange-100 to-yellow-100 rounded-full w-24 h-24 flex items-center justify-center gap-2 mx-auto mb-6">
-              <Search className="w-12 h-12 text-orange-500" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-700 mb-2">Nenhuma bebida encontrada</h2>
-            <p className="text-gray-500 mb-6">Tente buscar por outro termo ou categoria</p>
+          <div className="items-center px-4 py-3">
             <Button
-              onClick={() => {
-                setBusca("")
-                setCategoriaFiltro("todas")
-              }}
-              className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold px-8 py-3 rounded-xl hover-lift"
+              className="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300"
+              onClick={processarSenha}
+              disabled={senhaCarregando}
             >
-              🔄 Limpar Filtros
+              {senhaCarregando ? "Verificando..." : "Acessar"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300 ml-2"
+              onClick={fecharModalSenha}
+            >
+              Cancelar
             </Button>
           </div>
-        )}
-      </div>
-
-      {/* Rodapé */}
-      <Rodape />
-
-      {/* 🔥 MODAL DE SENHA REDESENHADO CONFORME A IMAGEM */}
-      {modalSenhaAberto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
-            {/* Header com gradiente laranja */}
-            <div className="bg-gradient-to-r from-orange-400 via-orange-500 to-yellow-500 p-8 text-center text-white">
-              <div className="w-16 h-16 mx-auto mb-4 bg-white/20 rounded-full flex items-center justify-center">
-                <Lock className="w-8 h-8 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Acesso Administrativo</h2>
-              <p className="text-white/90 text-sm">Digite a senha para continuar</p>
-            </div>
-
-            {/* Conteúdo do modal */}
-            <div className="p-6 space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">Senha de Administrador</label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    value={senhaInput}
-                    onChange={(e) => setSenhaInput(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && processarSenha()}
-                    className="w-full px-4 py-3 pr-12 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-700 placeholder-gray-400"
-                    placeholder="Digite sua senha..."
-                    disabled={senhaCarregando}
-                  />
-                  <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                    <Key className="w-5 h-5 text-orange-500" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Botões */}
-              <div className="flex space-x-3">
-                <Button
-                  onClick={processarSenha}
-                  disabled={senhaCarregando || !senhaInput.trim()}
-                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2"
-                >
-                  {senhaCarregando ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Verificando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>🚀</span>
-                      <span>Acessar</span>
-                    </>
-                  )}
-                </Button>
-                <Button
-                  onClick={fecharModalSenha}
-                  disabled={senhaCarregando}
-                  className="flex-1 bg-white hover:bg-gray-50 text-red-600 font-semibold py-3 rounded-xl border-2 border-gray-200 transition-all duration-200 flex items-center justify-center space-x-2"
-                >
-                  <span>✕</span>
-                  <span>Cancelar</span>
-                </Button>
-              </div>
-            </div>
-          </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

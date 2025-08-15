@@ -120,15 +120,19 @@ export default function EstoquePage() {
       setLoading(true)
       setErr(null)
 
+      console.log("[v0] Loading products from API...")
       const res = await fetch("/api/produtos", { cache: "no-store" })
+      console.log("[v0] API response status:", res.status)
 
       if (!res.ok) {
         throw new Error(`Erro ${res.status}: ${res.statusText}`)
       }
 
       const data = await res.json()
+      console.log("[v0] API response data:", data)
 
       if (data.ok && Array.isArray(data.data)) {
+        console.log("[v0] Products found:", data.data.length)
         setProducts(
           data.data.map((row: any) => ({
             id: row.id,
@@ -142,10 +146,11 @@ export default function EstoquePage() {
           })),
         )
       } else {
+        console.log("[v0] No products data or invalid format")
         setProducts([])
       }
     } catch (e: any) {
-      console.error("Error loading products:", e)
+      console.error("[v0] Error loading products:", e)
       setErr(String(e?.message || e))
       setProducts([]) // Set empty array on error to prevent white screen
     } finally {

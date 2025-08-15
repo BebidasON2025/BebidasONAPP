@@ -105,13 +105,21 @@ export default function EditProductDialogSupabase({
             patch: {
               nome: form.nome,
               preco: form.preco,
-              preco_compra: form.preco_compra,
               estoque: form.estoque,
               categoria: form.categoria,
               imagem: form.imagem,
             },
           }
-        : form
+        : {
+            nome: form.nome,
+            preco: form.preco,
+            estoque: form.estoque,
+            categoria: form.categoria,
+            imagem: form.imagem,
+          }
+
+      console.log("[v0] Saving product with data:", body)
+      console.log("[v0] Form preco_compra value:", form.preco_compra)
 
       const res = await fetch("/api/produtos", {
         method,
@@ -119,10 +127,34 @@ export default function EditProductDialogSupabase({
         body: JSON.stringify(body),
       })
       const data = await res.json()
+
+      console.log("[v0] API response:", data)
+
       if (!res.ok || !data.ok) throw new Error(data.error || "Falha ao salvar")
+
+      if (form.preco_compra > 0) {
+        const productId = product?.id || data.data.id
+        const precoRes = await fetch("/api/precos-compra", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            produto_id: productId,
+            preco_compra: form.preco_compra,
+          }),
+        })
+
+        const precoData = await precoRes.json()
+        console.log("[v0] Purchase price API response:", precoData)
+
+        if (!precoRes.ok || !precoData.success) {
+          console.warn("[v0] Failed to save purchase price:", precoData.error)
+        }
+      }
+
       onSaved?.(data.data)
       setOpen(false)
     } catch (e: any) {
+      console.log("[v0] Save error:", e)
       setErr(String(e.message || e))
     } finally {
       setSaving(false)

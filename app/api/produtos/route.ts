@@ -69,26 +69,48 @@ export async function PATCH(req: Request) {
 
     const supabase = getSupabaseAdmin()
 
-    const upd: Record<string, any> = {}
-    if (patch?.nome !== undefined || patch?.name !== undefined) upd.nome = patch?.nome ?? patch?.name ?? null
-    if (patch?.preco !== undefined || patch?.price !== undefined) upd.preco = Number(patch?.preco ?? patch?.price ?? 0)
-    if (patch?.preco_compra !== undefined || patch?.purchasePrice !== undefined)
-      upd.preco_compra = Number(patch?.preco_compra ?? patch?.purchasePrice ?? 0)
-    if (patch?.estoque !== undefined || patch?.stock !== undefined)
-      upd.estoque = Number(patch?.estoque ?? patch?.stock ?? 0)
-    if (patch?.categoria !== undefined || patch?.category !== undefined)
-      upd.categoria = patch?.categoria ?? patch?.category ?? null
-    if (patch?.alerta_estoque !== undefined) upd.alerta_estoque = Number(patch?.alerta_estoque ?? 10)
-    if (patch?.codigo_barras !== undefined || patch?.barcode !== undefined)
-      upd.codigo_barras = patch?.codigo_barras ?? patch?.barcode ?? null
-    if (patch?.imagem !== undefined) upd.imagem = patch?.imagem ?? null
+    const updateData: any = {}
 
-    const r = await supabase.from(TABLE).update(upd).eq("id", id).select("*").single()
-    if (r.error) {
-      console.error("Update error:", r.error)
-      return NextResponse.json({ ok: false, error: r.error.message }, { status: 500 })
+    if (patch?.nome !== undefined || patch?.name !== undefined) {
+      updateData.nome = patch?.nome ?? patch?.name ?? null
     }
-    return NextResponse.json({ ok: true, data: r.data })
+    if (patch?.preco !== undefined || patch?.price !== undefined) {
+      updateData.preco = Number(patch?.preco ?? patch?.price ?? 0)
+    }
+    if (patch?.preco_compra !== undefined || patch?.purchasePrice !== undefined) {
+      updateData.preco_compra = Number(patch?.preco_compra ?? patch?.purchasePrice ?? 0)
+    }
+    if (patch?.estoque !== undefined || patch?.stock !== undefined) {
+      updateData.estoque = Number(patch?.estoque ?? patch?.stock ?? 0)
+    }
+    if (patch?.categoria !== undefined || patch?.category !== undefined) {
+      updateData.categoria = patch?.categoria ?? patch?.category ?? null
+    }
+    if (patch?.alerta_estoque !== undefined) {
+      updateData.alerta_estoque = Number(patch?.alerta_estoque ?? 10)
+    }
+    if (patch?.codigo_barras !== undefined || patch?.barcode !== undefined) {
+      updateData.codigo_barras = patch?.codigo_barras ?? patch?.barcode ?? null
+    }
+    if (patch?.imagem !== undefined) {
+      updateData.imagem = patch?.imagem ?? null
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ ok: false, error: "Nenhum campo para atualizar" }, { status: 400 })
+    }
+
+    // Add timestamp
+    updateData.atualizado_em = new Date().toISOString()
+
+    const { data, error } = await supabase.from("produtos").update(updateData).eq("id", id).select("*").single()
+
+    if (error) {
+      console.error("Update error:", error)
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true, data })
   } catch (e: any) {
     console.error("PATCH error:", e)
     return NextResponse.json({ ok: false, error: String(e) }, { status: 500 })
