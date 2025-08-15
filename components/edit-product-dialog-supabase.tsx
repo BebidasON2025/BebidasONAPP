@@ -105,6 +105,7 @@ export default function EditProductDialogSupabase({
             patch: {
               nome: form.nome,
               preco: form.preco,
+              preco_compra: Number(form.preco_compra || 0),
               estoque: form.estoque,
               categoria: form.categoria,
               imagem: form.imagem,
@@ -113,6 +114,7 @@ export default function EditProductDialogSupabase({
         : {
             nome: form.nome,
             preco: form.preco,
+            preco_compra: Number(form.preco_compra || 0),
             estoque: form.estoque,
             categoria: form.categoria,
             imagem: form.imagem,
@@ -131,25 +133,6 @@ export default function EditProductDialogSupabase({
       console.log("[v0] API response:", data)
 
       if (!res.ok || !data.ok) throw new Error(data.error || "Falha ao salvar")
-
-      if (form.preco_compra > 0) {
-        const productId = product?.id || data.data.id
-        const precoRes = await fetch("/api/precos-compra", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            produto_id: productId,
-            preco_compra: form.preco_compra,
-          }),
-        })
-
-        const precoData = await precoRes.json()
-        console.log("[v0] Purchase price API response:", precoData)
-
-        if (!precoRes.ok || !precoData.success) {
-          console.warn("[v0] Failed to save purchase price:", precoData.error)
-        }
-      }
 
       onSaved?.(data.data)
       setOpen(false)

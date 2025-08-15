@@ -635,7 +635,33 @@ export const useAppStore = create<Store>()(
     {
       name: "bebidas-on-store",
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => s,
+      partialize: (state) => ({
+        // Only persist essential data, not large arrays that can be reloaded
+        products: state.products.slice(0, 50), // Limit to 50 most recent products
+        customers: state.customers.slice(0, 100), // Limit to 100 most recent customers
+        suppliers: state.suppliers.slice(0, 50), // Limit suppliers
+        finance: {
+          entries: state.finance.entries.slice(0, 100), // Only last 100 finance entries
+          totalSales: state.finance.totalSales,
+        },
+        orders: state.orders.slice(0, 50), // Only last 50 orders
+        invoices: state.invoices.slice(0, 50), // Only last 50 invoices
+        fiado: {
+          receipts: state.fiado.receipts.slice(0, 50), // Only last 50 fiado receipts
+        },
+      }),
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.error("Failed to rehydrate store:", error)
+          // Clear localStorage if it's corrupted or too large
+          try {
+            localStorage.removeItem("bebidas-on-store")
+            console.log("Cleared corrupted localStorage data")
+          } catch (e) {
+            console.error("Failed to clear localStorage:", e)
+          }
+        }
+      },
     },
   ),
 )

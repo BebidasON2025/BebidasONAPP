@@ -1641,6 +1641,36 @@ function BebidasOnAppContent() {
     carregarDados()
   }, [modoTeste])
 
+  useEffect(() => {
+    const handleStorageError = (e: StorageEvent | ErrorEvent) => {
+      if (e instanceof ErrorEvent && e.message?.includes('quota')) {
+        console.error('localStorage quota exceeded, clearing old data...')
+        try {
+          // Clear old localStorage data to free up space
+          const keysToRemove = []
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (key && (key.includes('bebidas') || key.includes('old-') || key.includes('cache-'))) {
+              keysToRemove.push(key)
+            }
+          }
+          keysToRemove.forEach(key => localStorage.removeItem(key))
+          console.log(`Cleared ${keysToRemove.length} localStorage items`)
+        } catch (error) {
+          console.error('Failed to clear localStorage:', error)
+        }
+      }
+    }
+
+    window.addEventListener('error', handleStorageError)
+    window.addEventListener('storage', handleStorageError)
+
+    return () => {
+      window.removeEventListener('error', handleStorageError)
+      window.removeEventListener('storage', handleStorageError)
+    }
+  }, [])
+
   const produtosFiltrados = bebidas.filter(
     (bebida) =>
       bebida.nome.toLowerCase().includes(buscaProdutos.toLowerCase()) ||
@@ -2270,367 +2300,4 @@ function BebidasOnAppContent() {
                           fill="currentColor"
                           className="w-4 h-4 inline mr-1"
                         >
-                          <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.924 2.25 12.767 2.25 9.25c0-5.103 4.14-9.24 9.24-9.24 4.767 0 8.89 3.637 9.24 8.362l.008.003.022.012a15.247 15.247 0 0 1 .383.218 25.18 25.18 0 0 1 4.244 3.17c3.002 3.672 5.439 6.828 5.439 10.33 0 5.103-4.14 9.24-9.24 9.24-4.767 0-8.89-3.637-9.24-8.362l-.008-.003-.022-.012-.383-.218-4.244-3.17C5.212 6.768 2.775 3.612 2.775.107 17.225 3.612 21.662 6.768 21.662 9.25c0 3.512-2.437 6.668-5.439 10.33a25.18 25.18 0 0 1-4.244 3.17.75.75 0 0 1-.383.218l-.022.012Z" />
-                        </svg>
-                        {categoria.cor}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-
-              {/* FORMULÁRIO DE NOVA CATEGORIA */}
-              <div className="bg-white shadow-md rounded-md p-4">
-                <h3 className="text-lg font-semibold text-gray-700 mb-2">Adicionar Nova Categoria</h3>
-                <div className="mb-2">
-                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="nome">
-                    Nome:
-                  </label>
-                  <Input
-                    type="text"
-                    id="nome"
-                    placeholder="Nome da categoria"
-                    value={novaCategoria.nome}
-                    onChange={(e) => setNovaCategoria({ ...novaCategoria, nome: e.target.value })}
-                  />
-                </div>
-                <div className="mb-2">
-                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="icone">
-                    Ícone:
-                  </label>
-                  <select
-                    id="icone"
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    value={novaCategoria.icone}
-                    onChange={(e) => setNovaCategoria({ ...novaCategoria, icone: e.target.value })}
-                  >
-                    {ICONES_CATEGORIAS.map((icone) => (
-                      <option key={icone.valor} value={icone.valor}>
-                        {icone.nome}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="mb-2">
-                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="cor">
-                    Cor:
-                  </label>
-                  <select
-                    id="cor"
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    value={novaCategoria.cor}
-                    onChange={(e) => setNovaCategoria({ ...novaCategoria, cor: e.target.value })}
-                  >
-                    {CORES_CATEGORIAS.map((cor) => (
-                      <option key={cor.valor} value={cor.valor}>
-                        {cor.nome}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <Button className="w-full" onClick={adicionarNovaCategoria} disabled={carregando}>
-                  {carregando ? "Adicionando..." : "Adicionar Categoria"}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* ABA DE PRODUTOS */}
-          {abaAdmin === "produtos" && (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Gerenciar Produtos</h2>
-
-              {/* BARRA DE BUSCA */}
-              <div className="mb-4 flex items-center space-x-2">
-                <Input
-                  type="search"
-                  placeholder="Buscar produto..."
-                  value={buscaProdutos}
-                  onChange={(e) => setBuscaProdutos(e.target.value)}
-                />
-                <Search className="w-5 h-5 text-gray-500" />
-              </div>
-
-              {/* LISTA DE PRODUTOS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                {produtosFiltrados.map((bebida) => (
-                  <Card key={bebida.id}>
-                    <CardContent className="p-4">
-                      <div className="relative">
-                        <Image
-                          src={bebida.imagem || "/placeholder.svg"}
-                          alt={bebida.nome}
-                          width={300}
-                          height={200}
-                          className="rounded-md object-cover w-full h-48"
-                        />
-                        <Badge className="absolute top-2 right-2" variant="secondary">
-                          R$ {bebida.preco.toFixed(2)}
-                        </Badge>
-                      </div>
-                      <h3 className="mt-2 text-lg font-semibold text-gray-800">{bebida.nome}</h3>
-                      <p className="text-sm text-gray-600">{bebida.descricao}</p>
-                      <div className="mt-2 flex items-center justify-between">
-                        <Badge className={getStatusEstoque(bebida.estoque).cor}>
-                          {getStatusEstoque(bebida.estoque).texto}
-                        </Badge>
-                        <div className="flex space-x-2">
-                          <Button variant="ghost" size="icon" onClick={() => setEditandoItem(bebida)}>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                              className="w-4 h-4"
-                            >
-                              <path d="M21.731 2.269a2.625 2.625 0 0 0-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 0 0 0-3.712ZM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 0 0-1.32 2.214l-.08 2.685a.75.75 0 0 0 .933.933l2.685-.08a5.25 5.25 0 0 0 2.214-1.32L19.513 8.199Z" />
-                            </svg>
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => excluirBebida(bebida.id)}>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                              className="w-4 h-4"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M16.5 5.25a.75.75 0 0 1 .75.75V6h-1.5V5.25a.75.75 0 0 1 .75-.75ZM14.25 6a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.75h-3V6ZM6 19c0 1.105.269 2.059.75 2.815a8.203 8.203 0 0 0 5.25 0c.481-.756.75-1.71.75-2.815V9H6v10Zm8.25-13.5a.75.75 0 0 1 .75.75v.75h-3V6a.75.75 0 0 1 .75-.75ZM8.494 5.17a3.75 3.75 0 0 1 5.012 0l.593.593a.75.75 0 0 1-1.06 1.06l-.593-.593a2.25 2.25 0 0 0-3.009 0l-.594.593a.75.75 0 0 1-1.06-1.06l.594-.593ZM10.5 3a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75Zm-4.5 0a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75ZM18 9.75h-1.125l-.5-1.5H7.625l-.5 1.5H6a.75.75 0 0 1-.75-.75V8.25h13.5v.75a.75.75 0 0 1-.75.75Z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-
-              {/* FORMULÁRIO DE NOVO PRODUTO */}
-              <div className="bg-white shadow-md rounded-md p-4">
-                <h3 className="text-lg font-semibold text-gray-700 mb-2">Adicionar Novo Produto</h3>
-                <div className="mb-2">
-                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="nome">
-                    Nome:
-                  </label>
-                  <Input
-                    type="text"
-                    id="nome"
-                    placeholder="Nome do produto"
-                    value={novoItem.nome}
-                    onChange={(e) => setNovoItem({ ...novoItem, nome: e.target.value })}
-                  />
-                </div>
-                <div className="mb-2">
-                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="descricao">
-                    Descrição:
-                  </label>
-                  <Input
-                    type="text"
-                    id="descricao"
-                    placeholder="Descrição do produto"
-                    value={novoItem.descricao}
-                    onChange={(e) => setNovoItem({ ...novoItem, descricao: e.target.value })}
-                  />
-                </div>
-                <div className="mb-2">
-                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="preco">
-                    Preço:
-                  </label>
-                  <Input
-                    type="number"
-                    id="preco"
-                    placeholder="Preço do produto"
-                    value={novoItem.preco}
-                    onChange={(e) => setNovoItem({ ...novoItem, preco: e.target.value })}
-                  />
-                </div>
-                <div className="mb-2">
-                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="categoria_id">
-                    Categoria:
-                  </label>
-                  <select
-                    id="categoria_id"
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    value={novoItem.categoria_id}
-                    onChange={(e) => setNovoItem({ ...novoItem, categoria_id: e.target.value })}
-                  >
-                    <option value="">Selecione uma categoria</option>
-                    {categorias.map((categoria) => (
-                      <option key={categoria.id} value={categoria.id}>
-                        {categoria.nome}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="mb-2">
-                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="estoque">
-                    Estoque:
-                  </label>
-                  <Input
-                    type="number"
-                    id="estoque"
-                    placeholder="Estoque do produto"
-                    value={novoItem.estoque}
-                    onChange={(e) => setNovoItem({ ...novoItem, estoque: e.target.value })}
-                  />
-                </div>
-                <div className="mb-2">
-                  <label className="block text-gray-700 text-sm font-bold mb-1" htmlFor="imagem">
-                    Imagem:
-                  </label>
-                  <Input type="file" id="imagem" accept="image/*" onChange={handleImageUpload} />
-                </div>
-                <Button className="w-full" onClick={adicionarNovaBebida} disabled={carregando}>
-                  {carregando ? "Adicionando..." : "Adicionar Produto"}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* ABA DE PEDIDOS */}
-          {abaAdmin === "pedidos" && (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Gerenciar Pedidos</h2>
-
-              {/* FILTRO DE DATA */}
-              <div className="mb-4">
-                <h3 className="text-lg font-semibold text-gray-700 mb-2">Filtrar por Data</h3>
-                <div className="flex items-center space-x-4">
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      value="todos"
-                      checked={filtroData === "todos"}
-                      onChange={() => setFiltroData("todos")}
-                      className="focus:ring-0"
-                    />
-                    <span>Todos</span>
-                  </label>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      value="semana"
-                      checked={filtroData === "semana"}
-                      onChange={() => setFiltroData("semana")}
-                      className="focus:ring-0"
-                    />
-                    <span>Última Semana</span>
-                  </label>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      value="mes"
-                      checked={filtroData === "mes"}
-                      onChange={() => setFiltroData("mes")}
-                      className="focus:ring-0"
-                    />
-                    <span>Último Mês</span>
-                  </label>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      value="ano"
-                      checked={filtroData === "ano"}
-                      onChange={() => setFiltroData("ano")}
-                      className="focus:ring-0"
-                    />
-                    <span>Último Ano</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* LISTA DE PEDIDOS */}
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        ID
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Data
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Pagamento
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Entrega
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {pedidosFiltrados.map((pedido) => (
-                      <tr key={pedido.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pedido.id}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pedido.data}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          R$ {pedido.total.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {pedido.formaPagamento.toUpperCase()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {pedido.tipoEntrega === "entrega" ? "Entrega" : "Retirada"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pedido.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </main>
-
-        <Rodape />
-      </div>
-    )
-  }
-
-  // MODAL DE SENHA
-  return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
-      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div className="mt-3 text-center">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">Acesso Administrativo</h3>
-          <div className="mt-2 px-7 py-3">
-            <Input
-              type="password"
-              placeholder="Digite a senha"
-              value={senhaInput}
-              onChange={(e) => setSenhaInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  processarSenha()
-                }
-              }}
-            />
-          </div>
-          <div className="items-center px-4 py-3">
-            <Button
-              className="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300"
-              onClick={processarSenha}
-              disabled={senhaCarregando}
-            >
-              {senhaCarregando ? "Verificando..." : "Acessar"}
-            </Button>
-            <Button
-              variant="ghost"
-              className="px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300 ml-2"
-              onClick={fecharModalSenha}
-            >
-              Cancelar
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+                          <path d=\"M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.924 2.25 12.767 2.25 9.25c0-5.103 4.14-9.24 9.24-9.24 4.767 0 8.89 3.637 9.24 8.362l.008.003.022.012a15.247 15.247 0 0 1 .383.218 25.18 25.18 0 0 1 4.244 3.17c3.002 3.672 5.439 6.828 5.439 10.33 0 5.103-4.14 9.24-9.24 9.24-4.767 0-8.89-3.637-9.24-8.362l-.008-.003-.022-.012-.383-.218-4.244-3.17C5.212 6.768 2.775
