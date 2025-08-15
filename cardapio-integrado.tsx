@@ -13,7 +13,7 @@ const supabaseKey =
 
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-const DELIVERY_SYSTEM_URL = "https://seu-sistema-delivery.vercel.app"
+const DELIVERY_SYSTEM_URL = "https://appbebidason.vercel.app/"
 
 const syncOrderWithDeliverySystem = async (orderData: any) => {
   try {

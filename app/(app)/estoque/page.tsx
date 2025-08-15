@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import SearchInput from "@/components/search-input"
 import { useEffect, useMemo, useState, useCallback } from "react"
-import { useAppStore } from "@/lib/store"
 import { formatBRL } from "@/lib/format"
 import AddProductDialogSupabase from "@/components/add-product-dialog-supabase"
 import EditProductDialogSupabase from "@/components/edit-product-dialog-supabase"
@@ -48,25 +47,23 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
+interface Product {
+  id: string
+  nome: string
+  categoria: string
+  codigo_barras: string
+  preco: number
+  estoque: number
+  alerta_estoque: number
+  imagem: string
+}
+
 interface DbCategory {
   id: number
   nome: string
   cor: string
   icone: string
   ativo: boolean
-}
-
-const mapProdutoRowToStore = (row) => {
-  return {
-    id: row.id,
-    nome: row.nome,
-    categoria: row.categoria,
-    codigo_barras: row.codigo_barras,
-    preco: row.preco,
-    estoque: row.estoque,
-    alerta_estoque: row.alerta_estoque,
-    imagem: row.imagem,
-  }
 }
 
 const getIconComponent = (iconName: string) => {
@@ -98,18 +95,11 @@ const getIconComponent = (iconName: string) => {
 }
 
 export default function EstoquePage() {
-  const store = useAppStore()
-  const { products, setProducts } = store
-
+  const [products, setProducts] = useState<Product[]>([])
   const [q, setQ] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("Geral")
-  const [hydrated, setHydrated] = useState<boolean>(() => {
-    return (useAppStore as any).persist?.hasHydrated?.() ?? true
-  })
-
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [serverDetails, setServerDetails] = useState<any>(null)
   const [busyDelete, setBusyDelete] = useState<string | null>(null)
   const [editingProduct, setEditingProduct] = useState<any>(null)
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
@@ -125,59 +115,54 @@ export default function EstoquePage() {
   const [dbCategories, setDbCategories] = useState<DbCategory[]>([])
   const [loadingCategories, setLoadingCategories] = useState(false)
 
-  useEffect(() => {
-    const api = (useAppStore as any).persist
-    if (api?.onFinishHydration) {
-      const unsub = api.onFinishHydration(() => setHydrated(true))
-      return () => unsub?.()
-    }
-  }, [])
-
-  function parseSafe(text: string) {
-    try {
-      return JSON.parse(text)
-    } catch {
-      return null
-    }
-  }
-
   const loadFromDB = useCallback(async () => {
     try {
       setLoading(true)
       setErr(null)
-      setServerDetails(null)
 
       const res = await fetch("/api/produtos", { cache: "no-store" })
-      const contentType = res.headers.get("content-type") || ""
-      const text = await res.text()
 
       if (!res.ok) {
-        const j = contentType.includes("application/json") ? parseSafe(text) : null
-        if (j) setServerDetails(j)
-        throw new Error(`${res.status} ${res.statusText}${j?.error ? ` - ${j.error}` : ""}`)
+        throw new Error(`Erro ${res.status}: ${res.statusText}`)
       }
 
-      const json = parseSafe(text)
-      if (!json?.ok) {
-        setServerDetails(json)
-        throw new Error(json?.error || "Falha ao consultar produtos.")
+      const data = await res.json()
+
+      if (data.ok && Array.isArray(data.data)) {
+        setProducts(
+          data.data.map((row: any) => ({
+            id: row.id,
+            nome: row.nome || "",
+            categoria: row.categoria || "",
+            codigo_barras: row.codigo_barras || "",
+            preco: row.preco || 0,
+            estoque: row.estoque || 0,
+            alerta_estoque: row.alerta_estoque || 0,
+            imagem: row.imagem || "",
+          })),
+        )
+      } else {
+        setProducts([])
       }
-      setProducts((json.data as any[]).map(mapProdutoRowToStore))
     } catch (e: any) {
+      console.error("Error loading products:", e)
       setErr(String(e?.message || e))
+      setProducts([]) // Set empty array on error to prevent white screen
     } finally {
       setLoading(false)
     }
-  }, [setProducts])
+  }, [])
 
   const loadCategories = useCallback(async () => {
     try {
       setLoadingCategories(true)
       const res = await fetch("/api/categorias")
-      const data = await res.json()
 
-      if (res.ok && data.ok && Array.isArray(data.data)) {
-        setDbCategories(data.data)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.ok && Array.isArray(data.data)) {
+          setDbCategories(data.data)
+        }
       }
     } catch (error) {
       console.error("Error loading categories:", error)
@@ -187,15 +172,13 @@ export default function EstoquePage() {
   }, [])
 
   useEffect(() => {
-    if (!hydrated) return
     loadFromDB()
     loadCategories()
-  }, [hydrated, loadFromDB, loadCategories])
+  }, [loadFromDB, loadCategories])
 
   const filtered = useMemo(() => {
-    const productsArray = Array.isArray(products) ? products : []
     const query = q.toLowerCase()
-    return productsArray.filter((p) => {
+    return products.filter((p) => {
       const matchesCategory =
         selectedCategory === "Geral" || (p.categoria?.toLowerCase() ?? "").includes(selectedCategory.toLowerCase())
 
@@ -209,13 +192,12 @@ export default function EstoquePage() {
   }, [products, q, selectedCategory])
 
   const analytics = useMemo(() => {
-    const productsArray = Array.isArray(products) ? products : []
-    const total = productsArray.length
-    const lowStock = productsArray.filter((p) => p.estoque <= (p.alerta_estoque || 0)).length
-    const totalValue = productsArray.reduce((sum, p) => sum + (p.preco || 0) * (p.estoque || 0), 0)
-    const avgPrice = total > 0 ? productsArray.reduce((sum, p) => sum + (p.preco || 0), 0) / total : 0
+    const total = products.length
+    const lowStock = products.filter((p) => p.estoque <= (p.alerta_estoque || 0)).length
+    const totalValue = products.reduce((sum, p) => sum + (p.preco || 0) * (p.estoque || 0), 0)
+    const outOfStock = products.filter((p) => (p.estoque || 0) === 0).length
 
-    return { total, lowStock, totalValue, avgPrice }
+    return { total, lowStock, totalValue, outOfStock }
   }, [products])
 
   async function deleteProduto(id: string, name: string) {
@@ -234,11 +216,13 @@ export default function EstoquePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: deleteConfirmation.productId }),
       })
-      const text = await res.text()
-      const json = parseSafe(text)
-      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status} - ${text}`)
-      await loadFromDB()
-      setDeleteConfirmation({ open: false, productId: "", productName: "" })
+
+      if (res.ok) {
+        await loadFromDB()
+        setDeleteConfirmation({ open: false, productId: "", productName: "" })
+      } else {
+        throw new Error(`Erro ${res.status}`)
+      }
     } catch (e: any) {
       setErr(String(e?.message || e))
     } finally {
@@ -357,11 +341,7 @@ export default function EstoquePage() {
               <div>
                 <p className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Categorias Ativas</p>
                 <p className="text-2xl font-bold text-orange-400 group-hover:text-orange-300 transition-colors">
-                  {
-                    new Set(
-                      (Array.isArray(products) ? products : []).filter((p) => p.categoria).map((p) => p.categoria),
-                    ).size
-                  }
+                  {new Set(products.filter((p) => p.categoria).map((p) => p.categoria)).size}
                 </p>
               </div>
               <Grid3X3 className="h-8 w-8 text-orange-400 group-hover:text-orange-300 transition-all duration-300 group-hover:scale-110" />
@@ -375,7 +355,7 @@ export default function EstoquePage() {
               <div>
                 <p className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Produtos em Falta</p>
                 <p className="text-2xl font-bold text-emerald-400 group-hover:text-emerald-300 transition-colors">
-                  {(Array.isArray(products) ? products : []).filter((p) => (p.estoque || 0) === 0).length}
+                  {analytics.outOfStock}
                 </p>
               </div>
               <XCircle className="h-8 w-8 text-emerald-400 group-hover:text-emerald-300 transition-all duration-300 group-hover:scale-110" />
@@ -447,19 +427,9 @@ export default function EstoquePage() {
               <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4" />
-                  Erro ao carregar do banco: {err}
+                  Erro ao carregar produtos: {err}
                 </div>
               </div>
-              {serverDetails && (
-                <details className="rounded-lg bg-gray-800/50 p-3 hover:bg-gray-800/70 transition-colors">
-                  <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300 transition-colors">
-                    Detalhes do servidor
-                  </summary>
-                  <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-gray-900 p-3 text-xs text-gray-300">
-                    {JSON.stringify(serverDetails || {}, null, 2)}
-                  </pre>
-                </details>
-              )}
             </div>
           )}
 

@@ -16,39 +16,35 @@ export default function Page() {
     products: [],
     customers: [],
     orders: [],
-    loading: false,
+    loading: false, // Start with loading false to show interface immediately
   })
 
   useEffect(() => {
     const loadData = async () => {
-      if (!supabase) {
-        console.warn("Supabase client not available")
-        return
-      }
-
       try {
         const [productsRes, customersRes, ordersRes] = await Promise.all([
-          supabase.from("produtos").select("*").limit(100),
-          supabase.from("clientes").select("*").limit(100),
-          supabase.from("pedidos").select("*").limit(100),
+          supabase.from("produtos").select("*"),
+          supabase.from("clientes").select("*"),
+          supabase.from("pedidos").select("*"),
         ])
 
-        setData({
-          products: productsRes?.data || [],
-          customers: customersRes?.data || [],
-          orders: ordersRes?.data || [],
-          loading: false,
-        })
+        if (productsRes?.data || customersRes?.data || ordersRes?.data) {
+          setData({
+            products: productsRes?.data || [],
+            customers: customersRes?.data || [],
+            orders: ordersRes?.data || [],
+            loading: false,
+          })
+        }
       } catch (error) {
         console.error("Error loading data:", error)
-        setData((prev) => ({ ...prev, loading: false }))
       }
     }
 
     loadData()
   }, [])
 
-  const { products, customers, orders } = data
+  const { products, customers, orders, loading } = data
 
   const vendasTotais = orders
     .filter((o: any) => o?.status?.toLowerCase() === "pago")
