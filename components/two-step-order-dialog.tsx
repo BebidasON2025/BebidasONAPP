@@ -845,7 +845,7 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
         </Dialog>
 
         <Dialog open={quantityDialogOpen} onOpenChange={setQuantityDialogOpen}>
-          <DialogContent className="w-[90vw] max-w-sm">
+          <DialogContent className="w-[95vw] max-w-sm mx-auto" onClick={(e) => e.stopPropagation()}>
             <DialogHeader>
               <DialogTitle>Alterar Quantidade</DialogTitle>
             </DialogHeader>
@@ -860,13 +860,32 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
                   className="mt-1"
                   min="0"
                   autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      handleQuantitySubmit()
+                    }
+                  }}
                 />
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setQuantityDialogOpen(false)} className="flex-1">
+                <Button
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setQuantityDialogOpen(false)
+                  }}
+                  className="flex-1"
+                >
                   Cancelar
                 </Button>
-                <Button onClick={handleQuantitySubmit} className="flex-1">
+                <Button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleQuantitySubmit()
+                  }}
+                  className="flex-1"
+                >
                   Confirmar
                 </Button>
               </div>

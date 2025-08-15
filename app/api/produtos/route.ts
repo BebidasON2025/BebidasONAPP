@@ -17,6 +17,7 @@ export async function GET() {
       id: p.id,
       nome: p.nome || "",
       preco: Number(p.preco || 0),
+      preco_compra: Number(p.preco_compra || 0),
       estoque: Number(p.estoque || 0),
       categoria: p.categoria || null,
       alerta_estoque: Number(p.alerta_estoque || 10),
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
     const toInsert = {
       nome: body.nome ?? body.name ?? "",
       preco: Number(body.preco ?? body.price ?? 0),
+      preco_compra: Number(body.preco_compra ?? body.purchasePrice ?? 0),
       estoque: Number(body.estoque ?? body.stock ?? 0),
       categoria: body.categoria ?? body.category ?? null,
       alerta_estoque: Number(body.alerta_estoque ?? 10),
@@ -70,6 +72,8 @@ export async function PATCH(req: Request) {
     const upd: Record<string, any> = {}
     if (patch?.nome !== undefined || patch?.name !== undefined) upd.nome = patch?.nome ?? patch?.name ?? null
     if (patch?.preco !== undefined || patch?.price !== undefined) upd.preco = Number(patch?.preco ?? patch?.price ?? 0)
+    if (patch?.preco_compra !== undefined || patch?.purchasePrice !== undefined)
+      upd.preco_compra = Number(patch?.preco_compra ?? patch?.purchasePrice ?? 0)
     if (patch?.estoque !== undefined || patch?.stock !== undefined)
       upd.estoque = Number(patch?.estoque ?? patch?.stock ?? 0)
     if (patch?.categoria !== undefined || patch?.category !== undefined)
