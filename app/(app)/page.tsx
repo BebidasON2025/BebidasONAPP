@@ -8,6 +8,7 @@ import { AlertTriangle, BarChart3 } from "lucide-react"
 import LowStockList from "@/components/low-stock-list"
 import { formatBRL } from "@/lib/format"
 import SalesChart from "@/components/sales-chart"
+import ProfitChart from "@/components/profit-chart"
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase-client"
 
@@ -22,11 +23,17 @@ export default function Page() {
   useEffect(() => {
     const loadData = async () => {
       try {
+        console.log("[v0] Loading dashboard data...")
         const [productsRes, customersRes, ordersRes] = await Promise.all([
           supabase.from("produtos").select("*"),
           supabase.from("clientes").select("*"),
           supabase.from("pedidos").select("*"),
         ])
+
+        console.log("[v0] Products loaded:", productsRes?.data?.length || 0)
+        console.log("[v0] Customers loaded:", customersRes?.data?.length || 0)
+        console.log("[v0] Orders loaded:", ordersRes?.data?.length || 0)
+        console.log("[v0] Orders data sample:", ordersRes?.data?.slice(0, 2))
 
         if (productsRes?.data || customersRes?.data || ordersRes?.data) {
           setData({
@@ -37,7 +44,7 @@ export default function Page() {
           })
         }
       } catch (error) {
-        console.error("Error loading data:", error)
+        console.error("[v0] Error loading dashboard data:", error)
       }
     }
 
@@ -46,9 +53,11 @@ export default function Page() {
 
   const { products, customers, orders, loading } = data
 
-  const vendasTotais = orders
-    .filter((o: any) => o?.status?.toLowerCase() === "pago")
-    .reduce((sum: number, o: any) => sum + Number(o?.total ?? 0), 0)
+  const paidOrders = orders.filter((o: any) => o?.status?.toLowerCase() === "pago")
+  console.log("[v0] Paid orders:", paidOrders.length, "out of", orders.length, "total orders")
+
+  const vendasTotais = paidOrders.reduce((sum: number, o: any) => sum + Number(o?.total ?? 0), 0)
+  console.log("[v0] Total sales:", vendasTotais)
 
   const lowCount = products.filter((p: any) => (p?.estoque || 0) <= (p?.alerta_estoque || 10)).length
 
@@ -94,6 +103,10 @@ export default function Page() {
             {lowCount > 0 && <div className="text-amber-400 text-sm mt-3 text-right">Ver todos ({lowCount})</div>}
           </CardContent>
         </Card>
+      </div>
+
+      <div className="w-full">
+        <ProfitChart orders={orders} />
       </div>
     </div>
   )

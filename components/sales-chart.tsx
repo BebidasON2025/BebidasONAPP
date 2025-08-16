@@ -3,7 +3,6 @@
 import * as React from "react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts"
 import { formatBRL } from "@/lib/format"
 
 type Order = {
@@ -61,18 +60,25 @@ function buildSeries(orders: Order[], range: RangeKey) {
   const paid = (orders || []).filter((o) => (o.status || "").toLowerCase() === "pago")
 
   if (range === "today") {
-    const start = startOfToday()
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+
     const buckets = Array.from({ length: 24 }).map((_, h) => ({
       label: `${String(h).padStart(2, "0")}:00`,
       keyHour: h,
       total: 0,
     }))
+
     for (const o of paid) {
       const d = getOrderDate(o)
       if (!d) continue
-      if (d >= start && sameDay(d, start)) {
+
+      // Check if order is from today using local timezone
+      if (d >= todayStart && d < todayEnd) {
         const h = d.getHours()
         buckets[h].total += toNumber(o.total)
+        console.log(`[v0] SalesChart: Adding R$ ${o.total} to hour ${h}`)
       }
     }
     return buckets
@@ -132,8 +138,45 @@ export default function SalesChart({
   defaultRange?: RangeKey
 }) {
   const [range, setRange] = React.useState<RangeKey>(defaultRange)
-  const data = React.useMemo(() => buildSeries(orders, range), [orders, range])
-  const totalPeriodo = React.useMemo(() => data.reduce((s, p: any) => s + toNumber(p.total), 0), [data])
+  const [, forceUpdate] = React.useReducer((x) => x + 1, 0)
+
+  React.useEffect(() => {
+    console.log("[v0] SalesChart received orders:", orders.length)
+    console.log("[v0] SalesChart orders sample:", orders.slice(0, 2))
+    const paidOrders = orders.filter((o) => (o.status || "").toLowerCase() === "pago")
+    console.log("[v0] SalesChart paid orders:", paidOrders.length)
+
+    if (range === "today") {
+      const now = new Date()
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+
+      paidOrders.forEach((order, index) => {
+        const orderDate = getOrderDate(order)
+        if (orderDate) {
+          const isToday = orderDate >= todayStart && orderDate < todayEnd
+          console.log(
+            `[v0] SalesChart order ${index}: ${orderDate.toISOString()}, isToday: ${isToday}, total: ${order.total}`,
+          )
+        }
+      })
+    }
+
+    forceUpdate()
+  }, [orders, range])
+
+  const data = React.useMemo(() => {
+    const result = buildSeries(orders, range)
+    console.log("[v0] SalesChart data points:", result.length)
+    console.log("[v0] SalesChart data sample:", result.slice(0, 3))
+    return result
+  }, [orders, range])
+
+  const totalPeriodo = React.useMemo(() => {
+    const total = data.reduce((s, p: any) => s + toNumber(p.total), 0)
+    console.log("[v0] SalesChart total for period:", total)
+    return total
+  }, [data])
 
   return (
     <Card className="hc-panel">
@@ -165,45 +208,45 @@ export default function SalesChart({
         {data.every((d: any) => toNumber(d.total) === 0) ? (
           <EmptyState />
         ) : (
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="#2a3342" strokeDasharray="3 3" />
-                <XAxis dataKey="label" stroke="#9aa4b2" tickLine={false} axisLine={false} />
-                <YAxis
-                  stroke="#9aa4b2"
-                  tickFormatter={(v) => formatBRL(v).replace("R$ ", "")}
-                  width={60}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#121721",
-                    border: "1px solid #3f4b60",
-                    borderRadius: 8,
-                    color: "#e5e7eb",
-                  }}
-                  formatter={(value: any) => [formatBRL(value as number), "Vendas"]}
-                  labelFormatter={(label) => `${label}`}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#f59e0b"
-                  strokeWidth={2}
-                  fill="url(#salesFill)"
-                  isAnimationActive
-                  animationDuration={700}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="h-64 space-y-3">
+            <div className="text-xs text-gray-400 mb-6 font-medium tracking-wide">
+              Vendas por {range === "today" ? "hora" : "período"}
+            </div>
+            <div className="space-y-3 max-h-52 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-500/20 scrollbar-track-transparent">
+              {data.map((item: any, index: number) => {
+                const value = toNumber(item.total)
+                const maxValue = Math.max(...data.map((d: any) => toNumber(d.total)))
+                const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0
+
+                if (value === 0) return null
+
+                return (
+                  <div
+                    key={index}
+                    className="group flex items-center gap-4 py-2 px-3 rounded-xl bg-gradient-to-r from-gray-800/30 to-gray-700/20 backdrop-blur-sm border border-gray-700/30 hover:border-amber-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/10"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <div className="w-14 text-xs text-gray-400 font-mono font-medium group-hover:text-amber-400 transition-colors">
+                      {item.label}
+                    </div>
+                    <div className="flex-1 bg-gradient-to-r from-gray-800 to-gray-700 rounded-full h-8 relative overflow-hidden shadow-inner">
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 rounded-full transition-all duration-1000 ease-out flex items-center justify-end pr-3 relative group-hover:from-amber-400 group-hover:via-yellow-400 group-hover:to-orange-400"
+                        style={{
+                          width: `${Math.max(percentage, 8)}%`,
+                          animation: `slideIn 1s ease-out ${index * 100}ms both`,
+                        }}
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                        <span className="text-xs font-bold text-black drop-shadow-sm relative z-10">
+                          {formatBRL(value)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </CardContent>
