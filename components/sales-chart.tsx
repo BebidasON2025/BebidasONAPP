@@ -61,7 +61,11 @@ function buildSeries(orders: Order[], range: RangeKey) {
 
   if (range === "today") {
     const now = new Date()
-    const todayStr = now.toISOString().slice(0, 10) // YYYY-MM-DD format
+    // Force timezone to local and get fresh date string
+    const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+
+    console.log(`[v0] SalesChart: Current timestamp: ${now.toISOString()}`)
+    console.log(`[v0] SalesChart: Today calculated as: ${todayStr}`)
 
     const buckets = Array.from({ length: 24 }).map((_, h) => ({
       label: `${String(h).padStart(2, "0")}:00`,
@@ -73,12 +77,15 @@ function buildSeries(orders: Order[], range: RangeKey) {
       const d = getOrderDate(o)
       if (!d) continue
 
-      // Check if order is from today using string comparison
-      const orderStr = d.toISOString().slice(0, 10)
+      const orderStr = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+      console.log(`[v0] SalesChart: Order date: ${d.toISOString()}, normalized: ${orderStr}, today: ${todayStr}`)
+
       if (orderStr === todayStr) {
         const h = d.getHours()
         buckets[h].total += toNumber(o.total)
         console.log(`[v0] SalesChart: Adding R$ ${o.total} to hour ${h}`)
+      } else {
+        console.log(`[v0] SalesChart: Skipping order from ${orderStr} (not today: ${todayStr})`)
       }
     }
     return buckets
@@ -148,12 +155,15 @@ export default function SalesChart({
 
     if (range === "today") {
       const now = new Date()
-      const todayStr = now.toISOString().slice(0, 10) // YYYY-MM-DD format
+      const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+      console.log(`[v0] SalesChart: Debug - Today is: ${todayStr}`)
 
       paidOrders.forEach((order, index) => {
         const orderDate = getOrderDate(order)
         if (orderDate) {
-          const orderStr = orderDate.toISOString().slice(0, 10)
+          const orderStr = new Date(orderDate.getTime() - orderDate.getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 10)
           const isToday = orderStr === todayStr
           console.log(
             `[v0] SalesChart order ${index}: ${orderDate.toISOString()}, orderDate: ${orderStr}, today: ${todayStr}, isToday: ${isToday}, total: ${order.total}`,
