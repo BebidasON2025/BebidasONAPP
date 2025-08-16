@@ -16,13 +16,58 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [lastLowStockCount, setLastLowStockCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
   const { products } = useAppStore()
+
+  useEffect(() => {
+    try {
+      const timer = setTimeout(() => {
+        setIsLoading(false)
+      }, 1000)
+
+      return () => clearTimeout(timer)
+    } catch (error) {
+      console.error("[v0] Layout initialization error:", error)
+      setHasError(true)
+      setIsLoading(false)
+    }
+  }, [])
 
   const lowStockProducts = Array.isArray(products) ? products.filter((p) => p.estoque <= (p.alerta_estoque || 10)) : []
 
   useEffect(() => {
     setLastLowStockCount(lowStockProducts.length)
   }, [lowStockProducts.length])
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gray-900 text-white">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-lg font-medium">Carregando sistema...</p>
+          <p className="text-sm text-gray-400">Aguarde um momento</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (hasError) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gray-900 text-white p-4">
+        <div className="text-center space-y-4 max-w-md">
+          <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto">
+            <AlertTriangle className="h-8 w-8 text-white" />
+          </div>
+          <h1 className="text-xl font-bold">Erro ao carregar</h1>
+          <p className="text-gray-400">Ocorreu um erro ao inicializar o sistema. Tente recarregar a página.</p>
+          <Button onClick={() => window.location.reload()} className="bg-amber-500 hover:bg-amber-600 text-black">
+            Recarregar
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   const notifications = [
     ...lowStockProducts.map((product) => ({

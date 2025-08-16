@@ -162,13 +162,20 @@ export default function SalesChart({
       })
     }
 
-    forceUpdate()
+    const timer = setTimeout(() => forceUpdate(), 100)
+    return () => clearTimeout(timer)
   }, [orders, range])
 
   const data = React.useMemo(() => {
     const result = buildSeries(orders, range)
     console.log("[v0] SalesChart data points:", result.length)
     console.log("[v0] SalesChart data sample:", result.slice(0, 3))
+    if (range === "today") {
+      const hour21 = result.find((item: any) => item.keyHour === 21)
+      if (hour21) {
+        console.log("[v0] SalesChart hour 21 data:", hour21)
+      }
+    }
     return result
   }, [orders, range])
 

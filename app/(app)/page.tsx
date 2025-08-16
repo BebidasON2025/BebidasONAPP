@@ -17,48 +17,37 @@ export default function Page() {
     products: [],
     customers: [],
     orders: [],
-    loading: false, // Start with loading false to show interface immediately
+    loading: false, // Start with loading false for faster initial render
   })
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        console.log("[v0] Loading dashboard data...")
         const [productsRes, customersRes, ordersRes] = await Promise.all([
           supabase.from("produtos").select("*"),
           supabase.from("clientes").select("*"),
           supabase.from("pedidos").select("*"),
         ])
 
-        console.log("[v0] Products loaded:", productsRes?.data?.length || 0)
-        console.log("[v0] Customers loaded:", customersRes?.data?.length || 0)
-        console.log("[v0] Orders loaded:", ordersRes?.data?.length || 0)
-        console.log("[v0] Orders data sample:", ordersRes?.data?.slice(0, 2))
-
-        if (productsRes?.data || customersRes?.data || ordersRes?.data) {
-          setData({
-            products: productsRes?.data || [],
-            customers: customersRes?.data || [],
-            orders: ordersRes?.data || [],
-            loading: false,
-          })
-        }
+        setData({
+          products: productsRes?.data || [],
+          customers: customersRes?.data || [],
+          orders: ordersRes?.data || [],
+          loading: false,
+        })
       } catch (error) {
-        console.error("[v0] Error loading dashboard data:", error)
+        console.error("Error loading dashboard data:", error)
+        setData((prev) => ({ ...prev, loading: false }))
       }
     }
 
     loadData()
   }, [])
 
-  const { products, customers, orders, loading } = data
+  const { products, customers, orders } = data
 
   const paidOrders = orders.filter((o: any) => o?.status?.toLowerCase() === "pago")
-  console.log("[v0] Paid orders:", paidOrders.length, "out of", orders.length, "total orders")
-
   const vendasTotais = paidOrders.reduce((sum: number, o: any) => sum + Number(o?.total ?? 0), 0)
-  console.log("[v0] Total sales:", vendasTotais)
-
   const lowCount = products.filter((p: any) => (p?.estoque || 0) <= (p?.alerta_estoque || 10)).length
 
   return (
