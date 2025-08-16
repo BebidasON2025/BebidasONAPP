@@ -1,11 +1,12 @@
 "use client"
 
-import { useAppStore } from "@/lib/store"
+interface LowStockListProps {
+  products?: any[]
+}
 
-export default function LowStockList() {
-  const { products } = useAppStore()
+export default function LowStockList({ products = [] }: LowStockListProps) {
   const safeProducts = Array.isArray(products) ? products : []
-  const low = safeProducts.filter((p) => p.estoque <= (p.alerta_estoque || 10))
+  const low = safeProducts.filter((p) => (p?.estoque || 0) <= (p?.alerta_estoque || 10))
 
   if (low.length === 0) {
     return (

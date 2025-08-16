@@ -88,7 +88,7 @@ export default function Page() {
             <p className="text-sm hc-muted mt-2">Produtos que precisam de reposição urgente.</p>
           </CardHeader>
           <CardContent className="hc-muted py-4">
-            <LowStockList />
+            <LowStockList products={products} />
             {lowCount > 0 && <div className="text-amber-400 text-sm mt-3 text-right">Ver todos ({lowCount})</div>}
           </CardContent>
         </Card>
