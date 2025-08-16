@@ -42,3 +42,5 @@ export function createSupabaseServerClient() {
     },
   })
 }
+
+export const createClient = createSupabaseServerClient

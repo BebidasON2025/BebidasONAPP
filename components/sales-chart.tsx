@@ -61,8 +61,7 @@ function buildSeries(orders: Order[], range: RangeKey) {
 
   if (range === "today") {
     const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+    const todayStr = now.toISOString().slice(0, 10) // YYYY-MM-DD format
 
     const buckets = Array.from({ length: 24 }).map((_, h) => ({
       label: `${String(h).padStart(2, "0")}:00`,
@@ -74,8 +73,9 @@ function buildSeries(orders: Order[], range: RangeKey) {
       const d = getOrderDate(o)
       if (!d) continue
 
-      // Check if order is from today using local timezone
-      if (d >= todayStart && d < todayEnd) {
+      // Check if order is from today using string comparison
+      const orderStr = d.toISOString().slice(0, 10)
+      if (orderStr === todayStr) {
         const h = d.getHours()
         buckets[h].total += toNumber(o.total)
         console.log(`[v0] SalesChart: Adding R$ ${o.total} to hour ${h}`)
@@ -148,15 +148,15 @@ export default function SalesChart({
 
     if (range === "today") {
       const now = new Date()
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      const todayStr = now.toISOString().slice(0, 10) // YYYY-MM-DD format
 
       paidOrders.forEach((order, index) => {
         const orderDate = getOrderDate(order)
         if (orderDate) {
-          const isToday = orderDate >= todayStart && orderDate < todayEnd
+          const orderStr = orderDate.toISOString().slice(0, 10)
+          const isToday = orderStr === todayStr
           console.log(
-            `[v0] SalesChart order ${index}: ${orderDate.toISOString()}, isToday: ${isToday}, total: ${order.total}`,
+            `[v0] SalesChart order ${index}: ${orderDate.toISOString()}, orderDate: ${orderStr}, today: ${todayStr}, isToday: ${isToday}, total: ${order.total}`,
           )
         }
       })
@@ -219,7 +219,7 @@ export default function SalesChart({
             <div className="text-xs text-gray-400 mb-6 font-medium tracking-wide">
               Vendas por {range === "today" ? "hora" : "período"}
             </div>
-            <div className="space-y-3 max-h-52 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-500/20 scrollbar-track-transparent">
+            <div className="space-y-3 max-h-52 overflow-y-auto">
               {data.map((item: any, index: number) => {
                 const value = toNumber(item.total)
                 const maxValue = Math.max(...data.map((d: any) => toNumber(d.total)))
@@ -231,7 +231,6 @@ export default function SalesChart({
                   <div
                     key={index}
                     className="group flex items-center gap-4 py-2 px-3 rounded-xl bg-gradient-to-r from-gray-800/30 to-gray-700/20 backdrop-blur-sm border border-gray-700/30 hover:border-amber-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/10"
-                    style={{ animationDelay: `${index * 50}ms` }}
                   >
                     <div className="w-14 text-xs text-gray-400 font-mono font-medium group-hover:text-amber-400 transition-colors">
                       {item.label}
@@ -241,10 +240,8 @@ export default function SalesChart({
                         className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 rounded-full transition-all duration-1000 ease-out flex items-center justify-end pr-3 relative group-hover:from-amber-400 group-hover:via-yellow-400 group-hover:to-orange-400"
                         style={{
                           width: `${Math.max(percentage, 8)}%`,
-                          animation: `slideIn 1s ease-out ${index * 100}ms both`,
                         }}
                       >
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
                         <span className="text-xs font-bold text-black drop-shadow-sm relative z-10">
                           {formatBRL(value)}
                         </span>

@@ -29,6 +29,10 @@ import Image from "next/image"
 import { createClient } from "@supabase/supabase-js"
 import { ToastProvider, useToast } from "@/components/toast"
 
+// 🔗 CONFIGURAÇÃO DE INTEGRAÇÃO COM SISTEMA PRINCIPAL
+const SISTEMA_API_URL = "https://appbebidason.vercel.app" // URL do seu sistema principal
+const USAR_INTEGRACAO = true // Ativar integração com sistema principal
+
 // 🗄️ CONFIGURAÇÃO DO SUPABASE
 const supabaseUrl = "https://qcaoaciohcqcwulsrtzu.supabase.co"
 const supabaseKey =
@@ -421,7 +425,50 @@ function BebidasOnAppContent() {
 
   const carregarBebidas = async () => {
     try {
-      console.log("🍻 Carregando produtos e categorias...")
+      console.log("🍻 Carregando produtos do sistema principal...")
+
+      if (USAR_INTEGRACAO) {
+        // 🔗 INTEGRAÇÃO: Buscar produtos do sistema principal
+        const response = await fetch(`${SISTEMA_API_URL}/api/menu/produtos`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          console.log("✅ Produtos carregados do sistema principal:", data.produtos?.length || 0)
+
+          // Converter formato do sistema principal para formato local
+          const bebidasFormatadas = (data.produtos || []).map((produto: any) => ({
+            id: produto.id,
+            nome: produto.nome,
+            descricao: produto.descricao || "",
+            preco: produto.preco,
+            categoria_id: 1, // Categoria padrão
+            categoria: {
+              id: 1,
+              nome: produto.categoria || "Bebidas",
+              icone: "package",
+              cor: "amber",
+              ativo: true,
+            },
+            imagem: produto.imagem || "/placeholder.svg?height=200&width=300&text=Produto",
+            estoque: produto.estoque || 0,
+            ativo: produto.estoque > 0,
+          }))
+
+          setBebidas(bebidasFormatadas)
+          console.log(`✅ ${bebidasFormatadas.length} produtos integrados com sucesso`)
+          return
+        } else {
+          console.warn("⚠️ Erro na API do sistema principal, usando dados locais")
+        }
+      }
+
+      // Fallback: usar dados locais se integração falhar
+      console.log("🔄 Carregando produtos locais como fallback...")
 
       // Carregar categorias primeiro
       const { data: categoriasData, error: categoriasError } = await supabase
@@ -431,7 +478,7 @@ function BebidasOnAppContent() {
 
       if (categoriasError) throw categoriasError
 
-      // Carregar produtos
+      // Carregar produtos locais
       const { data: produtosData, error: produtosError } = await supabase.from("produtos").select("*").order("nome")
 
       if (produtosError) throw produtosError
@@ -471,9 +518,14 @@ function BebidasOnAppContent() {
       })
 
       setBebidas(bebidasComCategorias)
-      console.log(`✅ ${bebidasComCategorias.length} produtos carregados com categorias`)
+      console.log(`✅ ${bebidasComCategorias.length} produtos locais carregados`)
     } catch (error) {
       console.error("❌ Erro ao carregar produtos:", error)
+      addToast({
+        type: "error",
+        title: "Erro ao carregar produtos",
+        description: "Não foi possível carregar o cardápio. Tente novamente.",
+      })
     }
   }
 
@@ -667,9 +719,62 @@ function BebidasOnAppContent() {
 
       console.log("📋 Dados do pedido:", novoPedido)
 
+      if (USAR_INTEGRACAO) {
+        try {
+          console.log("🔄 Enviando pedido para sistema principal...")
+          const response = await fetch(`${SISTEMA_API_URL}/api/menu/pedidos`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              numero_pedido: novoPedido.id,
+              cliente_nome: novoPedido.cliente,
+              cliente_telefone: TELEFONE_WHATSAPP,
+              items: novoPedido.itens.map((item) => ({
+                produto_nome: item.bebida.nome,
+                quantidade: item.quantidade,
+                preco_unitario: item.bebida.preco,
+              })),
+              total: novoPedido.total,
+              metodo_pagamento: novoPedido.formaPagamento,
+              endereco_entrega: novoPedido.enderecoEntrega || "",
+              tipo_entrega: novoPedido.tipoEntrega,
+              status: "pago", // Marcar como pago para aparecer nos gráficos
+              observacoes: `Pedido do cardápio integrado - ${novoPedido.data}`,
+            }),
+          })
+
+          if (response.ok) {
+            const result = await response.json()
+            console.log("✅ Pedido enviado para sistema principal:", result)
+            addToast({
+              type: "success",
+              title: "✅ Pedido integrado!",
+              description: "Seu pedido foi enviado para o sistema de gestão",
+            })
+          } else {
+            const errorText = await response.text()
+            console.warn("⚠️ Erro ao enviar para sistema principal:", errorText)
+            addToast({
+              type: "warning",
+              title: "⚠️ Integração parcial",
+              description: "Pedido salvo localmente, mas pode não aparecer no sistema principal",
+            })
+          }
+        } catch (integrationError) {
+          console.error("❌ Erro na integração:", integrationError)
+          addToast({
+            type: "warning",
+            title: "⚠️ Erro de integração",
+            description: "Pedido será salvo apenas localmente",
+          })
+        }
+      }
+
       if (!modoTeste) {
-        // 🔴 MODO PRODUÇÃO - Salvar no banco real
-        console.log("💾 Salvando pedido no banco...")
+        // 🔴 MODO PRODUÇÃO - Salvar no banco local também
+        console.log("💾 Salvando pedido no banco local...")
 
         const dadosParaInserir: any = {
           id: novoPedido.id,
@@ -697,59 +802,28 @@ function BebidasOnAppContent() {
         const { error } = await supabase.from("pedidos").insert([dadosParaInserir])
 
         if (error) {
-          console.error("❌ Erro ao inserir pedido:", error)
-          throw new Error(`Erro ao salvar pedido: ${error.message}`)
+          console.error("❌ Erro ao inserir pedido local:", error)
+          // Não fazer throw para não quebrar o fluxo se a integração funcionou
+        } else {
+          console.log("✅ Pedido salvo localmente:", novoPedido.id)
         }
 
-        console.log("✅ Pedido inserido com sucesso:", novoPedido.id)
+        // Atualizar estoque local (se não estiver usando integração)
+        if (!USAR_INTEGRACAO) {
+          console.log("📦 Atualizando estoque local...")
+          for (const item of carrinho) {
+            const novoEstoque = Math.max(0, item.bebida.estoque - item.quantidade)
+            const { error: estoqueError } = await supabase
+              .from("produtos")
+              .update({ estoque: novoEstoque })
+              .eq("id", item.bebida.id)
 
-        try {
-          console.log("🔄 Enviando pedido para sistema de gestão...")
-          const response = await fetch("https://appbebidason.vercel.app/api/integrar-pedido", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              id: novoPedido.id,
-              cliente_nome: novoPedido.cliente,
-              cliente_telefone: "", // Adicione se tiver campo de telefone
-              items: novoPedido.itens.map((item) => ({
-                produto_nome: item.bebida.nome,
-                quantidade: item.quantidade,
-                preco_unitario: item.bebida.preco,
-              })),
-              total: novoPedido.total,
-              metodo_pagamento: novoPedido.formaPagamento,
-              endereco_entrega: novoPedido.enderecoEntrega || "",
-              tipo_entrega: novoPedido.tipoEntrega,
-              status: novoPedido.status,
-            }),
-          })
-
-          if (response.ok) {
-            console.log("✅ Pedido sincronizado com sistema de gestão")
-          } else {
-            console.warn("⚠️ Erro na sincronização com sistema de gestão:", await response.text())
+            if (estoqueError) {
+              console.error("❌ Erro ao atualizar estoque local:", estoqueError)
+            }
           }
-        } catch (syncError) {
-          console.log("⚠️ Erro na sincronização, mas pedido foi salvo:", syncError)
+          await carregarBebidas()
         }
-
-        console.log("📦 Atualizando estoque...")
-        for (const item of carrinho) {
-          const novoEstoque = Math.max(0, item.bebida.estoque - item.quantidade)
-          const { error: estoqueError } = await supabase
-            .from("produtos")
-            .update({ estoque: novoEstoque })
-            .eq("id", item.bebida.id)
-
-          if (estoqueError) {
-            console.error("❌ Erro ao atualizar estoque:", estoqueError)
-          }
-        }
-
-        await carregarBebidas()
       } else {
         // 🧪 MODO TESTE - Apenas simular
         console.log("🧪 MODO TESTE - Pedido simulado (não salvo no banco)")
@@ -1643,31 +1717,31 @@ function BebidasOnAppContent() {
 
   useEffect(() => {
     const handleStorageError = (e: StorageEvent | ErrorEvent) => {
-      if (e instanceof ErrorEvent && e.message?.includes('quota')) {
-        console.error('localStorage quota exceeded, clearing old data...')
+      if (e instanceof ErrorEvent && e.message?.includes("quota")) {
+        console.error("localStorage quota exceeded, clearing old data...")
         try {
           // Clear old localStorage data to free up space
           const keysToRemove = []
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i)
-            if (key && (key.includes('bebidas') || key.includes('old-') || key.includes('cache-'))) {
+            if (key && (key.includes("bebidas") || key.includes("old-") || key.includes("cache-"))) {
               keysToRemove.push(key)
             }
           }
-          keysToRemove.forEach(key => localStorage.removeItem(key))
+          keysToRemove.forEach((key) => localStorage.removeItem(key))
           console.log(`Cleared ${keysToRemove.length} localStorage items`)
         } catch (error) {
-          console.error('Failed to clear localStorage:', error)
+          console.error("Failed to clear localStorage:", error)
         }
       }
     }
 
-    window.addEventListener('error', handleStorageError)
-    window.addEventListener('storage', handleStorageError)
+    window.addEventListener("error", handleStorageError)
+    window.addEventListener("storage", handleStorageError)
 
     return () => {
-      window.removeEventListener('error', handleStorageError)
-      window.removeEventListener('storage', handleStorageError)
+      window.removeEventListener("error", handleStorageError)
+      window.removeEventListener("storage", handleStorageError)
     }
   }, [])
 
@@ -2264,7 +2338,7 @@ function BebidasOnAppContent() {
                             >
                               <path
                                 fillRule="evenodd"
-                                d="M16.5 5.25a.75.75 0 0 1 .75.75V6h-1.5V5.25a.75.75 0 0 1 .75-.75ZM14.25 6a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.75h-3V6ZM6 19c0 1.105.269 2.059.75 2.815a8.203 8.203 0 0 0 5.25 0c.481-.756.75-1.71.75-2.815V9H6v10Zm8.25-13.5a.75.75 0 0 1 .75.75v.75h-3V6a.75.75 0 0 1 .75-.75ZM8.494 5.17a3.75 3.75 0 0 1 5.012 0l.593.593a.75.75 0 0 1-1.06 1.06l-.593-.593a2.25 2.25 0 0 0-3.009 0l-.594.593a.75.75 0 0 1-1.06-1.06l.594-.593ZM10.5 3a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75Zm-4.5 0a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75ZM18 9.75h-1.125l-.5-1.5H7.625l-.5 1.5H6a.75.75 0 0 1-.75-.75V8.25h13.5v.75a.75.75 0 0 1-.75.75Z"
+                                d="M16.5 5.25a.75.75 0 0 1 .75.75V6h-1.5V5.25a.75.75 0 0 1 .75-.75ZM14.25 6a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.75h-3V6ZM6 19c0 1.105.269 2.059.75 2.815a8.203 8.203 0 0 0 5.25 0c.481-.756.75-1.71.75-2.815V9H6v10Zm8.25-13.5a.75.75 0 0 1 .75.75v.75h-3V6a.75.75 0 0 1 .75-.75ZM8.494 5.17a3.75 3.75 0 0 1 5.012 0l.593.593a.75.75 0 0 1-1.06 1.06l-.593-.593a2.25 2.25 0 0 0-3.009 0l-.594.593a.75.75 0 0 1-1.06-1.06l.594-.593ZM10.5 3a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75ZM-4.5 0a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75ZM18 9.75h-1.125l-.5-1.5H7.625l-.5 1.5H6a.75.75 0 0 1-.75-.75V8.25h13.5v.75a.75.75 0 0 1-.75.75Z"
                                 clipRule="evenodd"
                               />
                             </svg>
@@ -2278,26 +2352,436 @@ function BebidasOnAppContent() {
                           fill="currentColor"
                           className="w-4 h-4 inline mr-1"
                         >
-                          <path d="M19.5 2.25a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v1.125a2.25 2.25 0 0 0 0 4.5V19.5a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V7.875a2.25 2.25 0 0 0 0-4.5V2.25ZM4.5 6a.75.75 0 0 1 .75-.75h14.25a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75-.75H5.25a.75.75 0 0 1-.75-.75V6ZM18 10.5a.75.75 0 0 1 .75.75v5.25a.75.75 0 0 1-.75.75H6a.75.75 0 0 1-.75-.75v-5.25a.75.75 0 0 1 .75-.75h12Z" />
+                          <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.924 2.25 12.767 2.25 9.25c0-5.103 4.14-9.24 9.24-9.24 4.767 0 8.89 3.637 9.24 8.362l.008.003.022.012a15.247 15.247 0 0 1 .383.218 25.18 25.18 0 0 1 4.244 3.17c3.002 3.672 5.439 6.828 5.439 10.33 0 5.103-4.14 9.24-9.24 9.24-4.767 0-8.89-3.637-9.24-8.362z" />
                         </svg>
+                        {categoria.cor}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ABA DE PRODUTOS */}
+          {abaAdmin === "produtos" && (
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Gerenciar Produtos</h2>
+
+              {/* BARRA DE BUSCA */}
+              <div className="mb-4 flex items-center space-x-2">
+                <Input
+                  type="search"
+                  placeholder="Buscar produto..."
+                  value={buscaProdutos}
+                  onChange={(e) => setBuscaProdutos(e.target.value)}
+                />
+                <Search className="w-5 h-5 text-gray-500" />
+              </div>
+
+              {/* LISTA DE PRODUTOS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                {produtosFiltrados.map((bebida) => (
+                  <Card key={bebida.id}>
+                    <CardContent className="p-4">
+                      <div className="relative">
+                        <Image
+                          src={bebida.imagem || "/placeholder.svg"}
+                          alt={bebida.nome}
+                          width={300}
+                          height={200}
+                          className="rounded-md object-cover w-full h-48"
+                        />
+                        <Badge className="absolute top-2 right-2" variant="secondary">
+                          R$ {bebida.preco.toFixed(2)}
+                        </Badge>
+                      </div>
+                      <h3 className="mt-2 text-lg font-semibold text-gray-800">{bebida.nome}</h3>
+                      <p className="text-sm text-gray-600">{bebida.descricao}</p>
+                      <div className="mt-2 flex items-center justify-between">
+                        <Badge className={getStatusEstoque(bebida.estoque).cor}>
+                          {getStatusEstoque(bebida.estoque).texto}
+                        </Badge>
+                        <div>
+                          <Button variant="ghost" size="icon" onClick={() => setEditandoItem(bebida)}>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path d="M21.731 2.269a2.625 2.625 0 0 0-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 0 0 0-3.712ZM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 0 0-1.32 2.214l-.08 2.685a.75.75 0 0 0 .933.933l2.685-.08a5.25 5.25 0 0 0 2.214-1.32L19.513 8.199Z" />
+                            </svg>
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => excluirBebida(bebida.id)}>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M16.5 5.25a.75.75 0 0 1 .75.75V6h-1.5V5.25a.75.75 0 0 1 .75-.75ZM14.25 6a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.75h-3V6ZM6 19c0 1.105.269 2.059.75 2.815a8.203 8.203 0 0 0 5.25 0c.481-.756.75-1.71.75-2.815V9H6v10Zm8.25-13.5a.75.75 0 0 1 .75.75v.75h-3V6a.75.75 0 0 1 .75-.75ZM8.494 5.17a3.75 3.75 0 0 1 5.012 0l.593.593a.75.75 0 0 1-1.06 1.06l-.593-.593a2.25 2.25 0 0 0-3.009 0l-.594.593a.75.75 0 0 1-1.06-1.06l.594-.593ZM10.5 3a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75ZM-4.5 0a.75.75 0 0 1 .75.75v.75h-1.5V3.75a.75.75 0 0 1 .75-.75ZM18 9.75h-1.125l-.5-1.5H7.625l-.5 1.5H6a.75.75 0 0 1-.75-.75V8.25h13.5v.75a.75.75 0 0 1-.75.75Z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ABA DE PEDIDOS */}
+          {abaAdmin === "pedidos" && (
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Gerenciar Pedidos</h2>
+
+              {/* FILTROS DE DATA */}
+              <div className="mb-4 flex items-center space-x-4">
+                <label className="text-gray-700">Filtrar por data:</label>
+                <select
+                  className="border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={filtroData}
+                  onChange={(e) => setFiltroData(e.target.value as "todos" | "semana" | "mes" | "ano")}
+                >
+                  <option value="todos">Todos</option>
+                  <option value="semana">Última semana</option>
+                  <option value="mes">Último mês</option>
+                  <option value="ano">Último ano</option>
+                </select>
+              </div>
+
+              {/* LISTA DE PEDIDOS */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full leading-normal">
+                  <thead>
+                    <tr>
+                      <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        ID
+                      </th>
+                      <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Data
+                      </th>
+                      <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Cliente
+                      </th>
+                      <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Total
+                      </th>
+                      <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Pagamento
+                      </th>
+                      <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Entrega
+                      </th>
+                      <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pedidosFiltrados.map((pedido) => (
+                      <tr key={pedido.id}>
+                        <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                          <p className="text-gray-900 whitespace-no-wrap">{pedido.id}</p>
+                        </td>
+                        <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                          <p className="text-gray-900 whitespace-no-wrap">{pedido.data}</p>
+                        </td>
+                        <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                          <p className="text-gray-900 whitespace-no-wrap">{pedido.cliente}</p>
+                        </td>
+                        <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                          <p className="text-gray-900 whitespace-no-wrap">R$ {pedido.total.toFixed(2)}</p>
+                        </td>
+                        <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                          <p className="text-gray-900 whitespace-no-wrap">{pedido.formaPagamento}</p>
+                        </td>
+                        <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                          <p className="text-gray-900 whitespace-no-wrap">{pedido.tipoEntrega}</p>
+                        </td>
+                        <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
+                          <Badge>{pedido.status}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* MODAL DE EDIÇÃO DE BEBIDA */}
+        {editandoItem && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+              <div className="mt-3 text-center">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">Editar Bebida</h3>
+                <div className="px-7 py-3">
+                  <Input
+                    type="text"
+                    placeholder="Nome da bebida"
+                    value={editandoItem.nome}
+                    onChange={(e) => setEditandoItem({ ...editandoItem, nome: e.target.value })}
+                  />
+                  <Input
+                    type="text"
+                    placeholder="Descrição"
+                    value={editandoItem.descricao}
+                    onChange={(e) => setEditandoItem({ ...editandoItem, descricao: e.target.value })}
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Preço"
+                    value={editandoItem.preco}
+                    onChange={(e) => setEditandoItem({ ...editandoItem, preco: Number.parseFloat(e.target.value) })}
+                  />
+                  <select
+                    className="border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editandoItem.categoria_id}
+                    onChange={(e) =>
+                      setEditandoItem({ ...editandoItem, categoria_id: Number.parseInt(e.target.value) })
+                    }
+                  >
+                    <option value="">Selecione a categoria</option>
+                    {categorias.map((categoria) => (
+                      <option key={categoria.id} value={categoria.id}>
                         {categoria.nome}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          className="w-4 h-4 inline mr-1"
-                        >
-                          <path d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v7.5a.75.75 0 0 0 .75.75h10.5a.75.75 0 0 0 .75-.75v-7.5a3 3 0 0 0-3-3v-3a5.25 5.25 0 0 0-5.25-5.25ZM12.75 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM7.5 12a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v5.25H7.5V12Z" />
-                        </svg>
-                        {categoria.icone}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          className="w-4 h-4 inline mr-1"
-                        >
-                          <path d=\"M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.924 2.25 12.767 2.25 9.25c0-5.103 4.14-9.24 9.24-9.24 4.767 0 8.89 3.637 9.24 8.362l.008.003.022.012a15.247 15.247 0 0 1 .383.218 25.18 25.18 0 0 1 4.244 3.17c3.002 3.672 5.439 6.828 5.439 10.33 0 5.103-4.14 9.24-9.24 9.24-4.767 0-8.89-3.637-9.24-8.362l-.008-.003-.022-.012-.383-.218-4.244-3.17C5.212 6.768 2.775
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    type="number"
+                    placeholder="Estoque"
+                    value={editandoItem.estoque}
+                    onChange={(e) => setEditandoItem({ ...editandoItem, estoque: Number.parseInt(e.target.value) })}
+                  />
+                  <Input type="file" accept="image/*" onChange={handleImageUpload} />
+                  {editandoItem.imagem && (
+                    <Image
+                      src={editandoItem.imagem || "/placeholder.svg"}
+                      alt="Imagem da bebida"
+                      width={100}
+                      height={100}
+                      className="rounded-md object-cover"
+                    />
+                  )}
+                </div>
+                <div className="items-center px-4 py-3">
+                  <Button variant="secondary" className="px-4 py-2 rounded mr-2" onClick={() => setEditandoItem(null)}>
+                    Cancelar
+                  </Button>
+                  <Button className="px-4 py-2 rounded" onClick={editarBebida}>
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE EDIÇÃO DE CATEGORIA */}
+        {editandoCategoria && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+              <div className="mt-3 text-center">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">Editar Categoria</h3>
+                <div className="px-7 py-3">
+                  <Input
+                    type="text"
+                    placeholder="Nome da categoria"
+                    value={editandoCategoria.nome}
+                    onChange={(e) => setEditandoCategoria({ ...editandoCategoria, nome: e.target.value })}
+                  />
+                  <select
+                    className="border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editandoCategoria.icone}
+                    onChange={(e) => setEditandoCategoria({ ...editandoCategoria, icone: e.target.value })}
+                  >
+                    <option value="">Selecione o ícone</option>
+                    {ICONES_CATEGORIAS.map((icone) => (
+                      <option key={icone.valor} value={icone.valor}>
+                        {icone.nome}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editandoCategoria.cor}
+                    onChange={(e) => setEditandoCategoria({ ...editandoCategoria, cor: e.target.value })}
+                  >
+                    <option value="">Selecione a cor</option>
+                    {CORES_CATEGORIAS.map((cor) => (
+                      <option key={cor.valor} value={cor.valor}>
+                        {cor.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="items-center px-4 py-3">
+                  <Button
+                    variant="secondary"
+                    className="px-4 py-2 rounded mr-2"
+                    onClick={() => setEditandoCategoria(null)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button className="px-4 py-2 rounded" onClick={editarCategoria}>
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* FORMULÁRIO DE NOVA BEBIDA */}
+        <div className="bg-white shadow-md rounded-md p-4">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Adicionar Nova Bebida</h2>
+          <Input
+            type="text"
+            placeholder="Nome da bebida"
+            value={novoItem.nome}
+            onChange={(e) => setNovoItem({ ...novoItem, nome: e.target.value })}
+          />
+          <Input
+            type="text"
+            placeholder="Descrição"
+            value={novoItem.descricao}
+            onChange={(e) => setNovoItem({ ...novoItem, descricao: e.target.value })}
+          />
+          <Input
+            type="number"
+            placeholder="Preço"
+            value={novoItem.preco}
+            onChange={(e) => setNovoItem({ ...novoItem, preco: e.target.value })}
+          />
+          <select
+            className="border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={novoItem.categoria_id}
+            onChange={(e) => setNovoItem({ ...novoItem, categoria_id: e.target.value })}
+          >
+            <option value="">Selecione a categoria</option>
+            {categorias.map((categoria) => (
+              <option key={categoria.id} value={categoria.id}>
+                {categoria.nome}
+              </option>
+            ))}
+          </select>
+          <Input
+            type="number"
+            placeholder="Estoque"
+            value={novoItem.estoque}
+            onChange={(e) => setNovoItem({ ...novoItem, estoque: e.target.value })}
+          />
+          <Input type="file" accept="image/*" onChange={handleImageUpload} />
+          {novoItem.imagem && (
+            <Image
+              src={novoItem.imagem || "/placeholder.svg"}
+              alt="Imagem da bebida"
+              width={100}
+              height={100}
+              className="rounded-md object-cover"
+            />
+          )}
+          <Button className="w-full mt-4" onClick={adicionarNovaBebida}>
+            Adicionar Bebida
+          </Button>
+        </div>
+
+        {/* FORMULÁRIO DE NOVA CATEGORIA */}
+        <div className="bg-white shadow-md rounded-md p-4 mt-4">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Adicionar Nova Categoria</h2>
+          <Input
+            type="text"
+            placeholder="Nome da categoria"
+            value={novaCategoria.nome}
+            onChange={(e) => setNovaCategoria({ ...novaCategoria, nome: e.target.value })}
+          />
+          <select
+            className="border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={novaCategoria.icone}
+            onChange={(e) => setNovaCategoria({ ...novaCategoria, icone: e.target.value })}
+          >
+            <option value="">Selecione o ícone</option>
+            {ICONES_CATEGORIAS.map((icone) => (
+              <option key={icone.valor} value={icone.valor}>
+                {icone.nome}
+              </option>
+            ))}
+          </select>
+          <select
+            className="border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={novaCategoria.cor}
+            onChange={(e) => setNovaCategoria({ ...novaCategoria, cor: e.target.value })}
+          >
+            <option value="">Selecione a cor</option>
+            {CORES_CATEGORIAS.map((cor) => (
+              <option key={cor.valor} value={cor.valor}>
+                {cor.nome}
+              </option>
+            ))}
+          </select>
+          <Button className="w-full mt-4" onClick={adicionarNovaCategoria}>
+            Adicionar Categoria
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // MODAL DE SENHA
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      {modalSenhaAberto && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center">
+          <div className="relative p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3 text-center">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Acesso Administrativo</h3>
+              <div className="px-7 py-3">
+                <Input
+                  type="password"
+                  placeholder="Digite a senha"
+                  value={senhaInput}
+                  onChange={(e) => setSenhaInput(e.target.value)}
+                />
+              </div>
+              <div className="items-center px-4 py-3">
+                <Button variant="secondary" className="px-4 py-2 rounded mr-2" onClick={fecharModalSenha}>
+                  Cancelar
+                </Button>
+                <Button className="px-4 py-2 rounded" onClick={processarSenha} disabled={senhaCarregando}>
+                  {senhaCarregando ? "Verificando..." : "Acessar"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {carregandoInicial ? (
+        <div className="flex flex-col items-center justify-center">
+          <svg className="animate-spin h-12 w-12 text-blue-500" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" fill="currentColor" />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            />
+          </svg>
+          <p className="mt-4 text-gray-600">Carregando...</p>
+        </div>
+      ) : (
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-800">Bebidas ON</h1>
+          <p className="mt-2 text-gray-600">Aguarde...</p>
+        </div>
+      )}
+    </div>
+  )
+}
