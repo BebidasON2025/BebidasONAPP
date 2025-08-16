@@ -53,6 +53,7 @@ interface Product {
   categoria: string
   codigo_barras: string
   preco: number
+  preco_compra: number
   estoque: number
   alerta_estoque: number
   imagem: string
@@ -140,6 +141,7 @@ export default function EstoquePage() {
             categoria: row.categoria || "",
             codigo_barras: row.codigo_barras || "",
             preco: row.preco || 0,
+            preco_compra: row.preco_compra || 0,
             estoque: row.estoque || 0,
             alerta_estoque: row.alerta_estoque || 0,
             imagem: row.imagem || "",
