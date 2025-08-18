@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
 import {
   ArrowLeft,
   ArrowRight,
@@ -23,7 +22,7 @@ import {
   MicOff,
   User,
   CreditCard,
-  MapPin,
+  DollarSign,
 } from "lucide-react"
 import { formatCurrency } from "@/lib/format"
 
@@ -64,6 +63,7 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
   const [status, setStatus] = useState("pago")
   const [discount, setDiscount] = useState(0)
   const [deliveryFee, setDeliveryFee] = useState(0)
+  const [amountPaid, setAmountPaid] = useState(0)
   const [deliveryAddress, setDeliveryAddress] = useState("")
   const [observations, setObservations] = useState("")
   const [cart, setCart] = useState<{ product: Product; quantity: number }[]>([])
@@ -104,37 +104,55 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
     setLoadingData(true)
     try {
       const [clientsResponse, productsResponse] = await Promise.all([
-        fetch("/api/clientes"),
-        fetch("/api/produtos"), // Removed exclude_images parameter to load product images
+        fetch("/api/clientes").catch((err) => {
+          console.error("Failed to fetch clients:", err)
+          return { ok: false, status: 500 }
+        }),
+        fetch("/api/produtos").catch((err) => {
+          console.error("Failed to fetch products:", err)
+          return { ok: false, status: 500 }
+        }),
       ])
 
       let clientsData: Client[] = []
       let productsData: Product[] = []
 
       if (clientsResponse.ok) {
-        const clientsResult = await clientsResponse.json()
-        if (Array.isArray(clientsResult)) {
-          clientsData = clientsResult
-        } else if (clientsResult.data && Array.isArray(clientsResult.data)) {
-          clientsData = clientsResult.data
-        } else if (clientsResult.clientes && Array.isArray(clientsResult.clientes)) {
-          clientsData = clientsResult.clientes
+        try {
+          const clientsResult = await clientsResponse.json()
+          if (Array.isArray(clientsResult)) {
+            clientsData = clientsResult
+          } else if (clientsResult.data && Array.isArray(clientsResult.data)) {
+            clientsData = clientsResult.data
+          } else if (clientsResult.clientes && Array.isArray(clientsResult.clientes)) {
+            clientsData = clientsResult.clientes
+          }
+        } catch (jsonError) {
+          console.error("Failed to parse clients JSON:", jsonError)
         }
+      } else {
+        console.warn("Clients API returned status:", clientsResponse.status)
       }
 
       if (productsResponse.ok) {
-        const productsResult = await productsResponse.json()
-        let allProducts: Product[] = []
+        try {
+          const productsResult = await productsResponse.json()
+          let allProducts: Product[] = []
 
-        if (Array.isArray(productsResult)) {
-          allProducts = productsResult
-        } else if (productsResult.data && Array.isArray(productsResult.data)) {
-          allProducts = productsResult.data
-        } else if (productsResult.produtos && Array.isArray(productsResult.produtos)) {
-          allProducts = productsResult.produtos
+          if (Array.isArray(productsResult)) {
+            allProducts = productsResult
+          } else if (productsResult.data && Array.isArray(productsResult.data)) {
+            allProducts = productsResult.data
+          } else if (productsResult.produtos && Array.isArray(productsResult.produtos)) {
+            allProducts = productsResult.produtos
+          }
+
+          productsData = allProducts.filter((p) => p.estoque > 0)
+        } catch (jsonError) {
+          console.error("Failed to parse products JSON:", jsonError)
         }
-
-        productsData = allProducts.filter((p) => p.estoque > 0)
+      } else {
+        console.warn("Products API returned status:", productsResponse.status)
       }
 
       const cacheData = {
@@ -148,6 +166,8 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
       setProducts(productsData)
     } catch (error) {
       console.error("Error loading data:", error)
+      setClients([])
+      setProducts([])
     } finally {
       setLoadingData(false)
     }
@@ -187,6 +207,46 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
 
   const getTotal = () => {
     return getSubtotal() - discount + deliveryFee
+  }
+
+  const getChange = () => {
+    if (paymentMethod === "Dinheiro" && amountPaid > 0) {
+      return Math.max(0, amountPaid - getTotal())
+    }
+    return 0
+  }
+
+  const getChangeStatus = () => {
+    if (paymentMethod !== "Dinheiro" || amountPaid === 0) {
+      return null
+    }
+
+    const total = getTotal()
+    const change = getChange()
+
+    if (amountPaid === total) {
+      return {
+        message: "Não precisa de troco",
+        color: "text-green-400",
+        bgColor: "bg-green-900/20",
+        borderColor: "border-green-600/50",
+      }
+    } else if (amountPaid > total) {
+      return {
+        message: `Troco a devolver: ${formatCurrency(change)}`,
+        color: "text-yellow-400",
+        bgColor: "bg-yellow-900/20",
+        borderColor: "border-yellow-600/50",
+      }
+    } else {
+      const missing = total - amountPaid
+      return {
+        message: `Ainda falta ${formatCurrency(missing)} para o valor total`,
+        color: "text-red-400",
+        bgColor: "bg-red-900/20",
+        borderColor: "border-red-600/50",
+      }
+    }
   }
 
   const canProceedToStep2 = () => {
@@ -238,15 +298,16 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
     setLoading(true)
 
     try {
-      // Prepare order data
       const orderData = {
         cliente_nome_texto: selectedClient?.nome || clientName || null,
         cliente_id: selectedClient?.id || null,
-        metodo: paymentMethod, // Changed from metodo_pagamento to metodo
+        metodo: paymentMethod,
         status: status,
         desconto: discount,
         taxa_entrega: deliveryFee,
         total: getTotal(),
+        valor_pago: paymentMethod === "Dinheiro" ? amountPaid : getTotal(),
+        troco: paymentMethod === "Dinheiro" ? getChange() : 0,
         items: cart.map((item) => ({
           produto_id: item.product.id,
           qtd: item.quantity,
@@ -254,7 +315,6 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
         })),
       }
 
-      // Save order to database
       const response = await fetch("/api/pedidos", {
         method: "POST",
         headers: {
@@ -267,7 +327,6 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
         throw new Error("Erro ao criar pedido")
       }
 
-      // Reset form and close dialog
       setCart([])
       setSelectedClient(null)
       setClientName("")
@@ -276,10 +335,10 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
       setObservations("")
       setDiscount(0)
       setDeliveryFee(0)
+      setAmountPaid(0)
       setStep(1)
       setDialogOpen(false)
 
-      // Call callback to refresh orders list
       onSaved?.()
     } catch (error) {
       console.error("Erro ao criar pedido:", error)
@@ -323,6 +382,7 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
       setObservations("")
       setSearchQuery("")
       setImageLoadErrors(new Set())
+      setAmountPaid(0)
     }
   }, [dialogOpen])
 
@@ -635,6 +695,18 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
                             <span className="text-lg font-bold text-white">Total:</span>
                             <span className="text-xl font-bold text-green-400">{formatCurrency(getTotal())}</span>
                           </div>
+                          {paymentMethod === "Dinheiro" && amountPaid > 0 && (
+                            <>
+                              <div className="flex justify-between text-blue-300">
+                                <span>Valor Pago:</span>
+                                <span>{formatCurrency(amountPaid)}</span>
+                              </div>
+                              <div className="flex justify-between text-yellow-400 font-semibold">
+                                <span>Troco:</span>
+                                <span>{formatCurrency(getChange())}</span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -752,17 +824,66 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
                         )}
                       </div>
                     </div>
+
+                    {paymentMethod === "Dinheiro" && (
+                      <div className="mt-4 p-3 bg-yellow-900/30 rounded-lg border border-yellow-600/50">
+                        <div className="flex items-center gap-2 mb-3">
+                          <DollarSign className="h-4 w-4 text-yellow-400" />
+                          <span className="text-yellow-100 font-medium">Pagamento em Dinheiro</span>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label className="text-yellow-100 font-medium">Valor Pago pelo Cliente</Label>
+                            <Input
+                              type="number"
+                              value={amountPaid === 0 ? "" : amountPaid}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                setAmountPaid(value === "" ? 0 : Number(value) || 0)
+                              }}
+                              placeholder={`Total: ${formatCurrency(getTotal())}`}
+                              min="0"
+                              step="0.01"
+                              className="bg-gray-800/80 border-yellow-600/50 text-white placeholder:text-gray-400 hover:border-yellow-500 transition-colors"
+                              onFocus={(e) => {
+                                if (amountPaid === 0) {
+                                  e.target.select()
+                                }
+                              }}
+                            />
+                          </div>
+
+                          {(() => {
+                            const status = getChangeStatus()
+                            if (!status) return null
+
+                            return (
+                              <div className={`p-3 rounded-lg border ${status.bgColor} ${status.borderColor}`}>
+                                <div className="flex items-center justify-between">
+                                  <span className={`font-medium ${status.color}`}>{status.message}</span>
+                                  {amountPaid > getTotal() && (
+                                    <span className="text-yellow-400 font-bold text-lg">
+                                      {formatCurrency(getChange())}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="bg-gradient-to-r from-purple-900/50 to-purple-800/50 p-4 rounded-xl border border-purple-700/50 shadow-lg">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="p-2 bg-purple-600 rounded-lg shadow-md">
-                        <MapPin className="h-4 w-4 text-white" />
+                        <DollarSign className="h-4 w-4 text-white" />
                       </div>
-                      <h3 className="text-lg font-semibold text-white">Detalhes Financeiros & Entrega</h3>
+                      <h3 className="text-lg font-semibold text-white">Detalhes Financeiros</h3>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-purple-100 font-medium">Desconto</Label>
                         <Input
@@ -788,27 +909,6 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
                           className="bg-gray-800/80 border-purple-600/50 text-white placeholder:text-gray-400 hover:border-purple-500 transition-colors"
                         />
                       </div>
-                    </div>
-
-                    <div className="space-y-2 mb-4">
-                      <Label className="text-purple-100 font-medium">Endereço de Entrega</Label>
-                      <Input
-                        value={deliveryAddress}
-                        onChange={(e) => setDeliveryAddress(e.target.value)}
-                        placeholder="Rua, número, bairro, cidade"
-                        className="bg-gray-800/80 border-purple-600/50 text-white placeholder:text-gray-400 hover:border-purple-500 transition-colors"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-purple-100 font-medium">Observações</Label>
-                      <Textarea
-                        value={observations}
-                        onChange={(e) => setObservations(e.target.value)}
-                        placeholder="Observações sobre o pedido..."
-                        rows={3}
-                        className="bg-gray-800/80 border-purple-600/50 text-white placeholder:text-gray-400 hover:border-purple-500 transition-colors"
-                      />
                     </div>
                   </div>
                 </div>
