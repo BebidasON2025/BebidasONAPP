@@ -84,9 +84,9 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
     null,
   )
   const [tempQuantity, setTempQuantity] = useState("")
+  const [imageLoadErrors, setImageLoadErrors] = useState<Set<string>>(new Set())
 
   const CACHE_DURATION = 30 * 60 * 1000 // 30 minutes instead of 5
-  const [imageLoadErrors, setImageLoadErrors] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (dialogOpen) {
@@ -105,7 +105,7 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
     try {
       const [clientsResponse, productsResponse] = await Promise.all([
         fetch("/api/clientes"),
-        fetch("/api/produtos"), // Removed exclude_images parameter for now
+        fetch("/api/produtos"), // Removed exclude_images parameter to load product images
       ])
 
       let clientsData: Client[] = []
@@ -134,12 +134,7 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
           allProducts = productsResult.produtos
         }
 
-        productsData = allProducts
-          .filter((p) => p.estoque > 0)
-          .map((p) => ({
-            ...p,
-            imagem: null, // Remove images for faster initial load
-          }))
+        productsData = allProducts.filter((p) => p.estoque > 0)
       }
 
       const cacheData = {
@@ -327,6 +322,7 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
       setDeliveryAddress("")
       setObservations("")
       setSearchQuery("")
+      setImageLoadErrors(new Set())
     }
   }, [dialogOpen])
 
@@ -339,6 +335,14 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
     if (cat.includes("água")) return "💧"
     if (cat.includes("suco")) return "🧃"
     return "🍺"
+  }
+
+  const handleImageError = (productId: number) => {
+    setImageLoadErrors((prev) => new Set([...prev, productId.toString()]))
+  }
+
+  const shouldShowImage = (product: Product) => {
+    return product.imagem && !imageLoadErrors.has(product.id.toString())
   }
 
   if (children && !isControlled) {
@@ -510,7 +514,17 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
                           >
                             <CardContent className="p-3">
                               <div className="aspect-square bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
-                                <div className="text-3xl">{getCategoryEmoji(product.categoria)}</div>
+                                {shouldShowImage(product) ? (
+                                  <img
+                                    src={product.imagem || "/placeholder.svg"}
+                                    alt={product.nome}
+                                    className="w-full h-full object-cover rounded-lg"
+                                    onError={() => handleImageError(product.id)}
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="text-3xl">{getCategoryEmoji(product.categoria)}</div>
+                                )}
                               </div>
 
                               <div className="space-y-2">
