@@ -109,59 +109,33 @@ export async function POST(req: Request) {
 
     const itemsRaw = Array.isArray(payload.items) ? payload.items : []
     console.log("[v0] Raw items array:", JSON.stringify(itemsRaw))
-    console.log("[v0] Raw items array length:", itemsRaw.length)
 
-    const itemsProcessed = []
-    for (let i = 0; i < itemsRaw.length; i++) {
-      const it = itemsRaw[i]
-      console.log(`[v0] Processing item ${i}:`, JSON.stringify(it))
+    const items = await Promise.all(
+      itemsRaw
+        .map(async (it) => {
+          const produto_id = it.produto_id || it.produtoId || it.productId || it.id
+          const qtd = Number(it.qtd ?? it.qty ?? 0)
+          const preco = Number(it.preco ?? it.price ?? 0)
+          let nome = it.nome || it.name || "Produto"
 
-      const produto_id = it.produto_id || it.produtoId || it.productId || it.id
-      const qtd = Number(it.qtd ?? it.qty ?? 0)
-      const preco = Number(it.preco ?? it.price ?? 0)
-      let nome = it.nome || it.name || "Produto"
+          // Get product name if not provided
+          if (!it.nome && !it.name && produto_id) {
+            const { data: product } = await supabase.from(PRODUCT_TABLE).select("nome").eq("id", produto_id).single()
+            nome = product?.nome || "Produto"
+          }
 
-      console.log(`[v0] Item ${i} extracted values:`, {
-        produto_id,
-        qtd,
-        preco,
-        nome,
-        hasValidId: !!produto_id,
-        hasValidQty: qtd > 0,
-      })
+          return {
+            produto_id,
+            qtd,
+            preco,
+            nome,
+            subtotal: qtd * preco,
+          }
+        })
+        .filter((i) => i.produto_id && i.qtd > 0),
+    )
 
-      // Get product name if not provided
-      if (!it.nome && !it.name && produto_id) {
-        const { data: product } = await supabase.from(PRODUCT_TABLE).select("nome").eq("id", produto_id).single()
-        nome = product?.nome || "Produto"
-        console.log(`[v0] Item ${i} fetched product name:`, nome)
-      }
-
-      const processedItem = {
-        produto_id,
-        qtd,
-        preco,
-        nome,
-        subtotal: qtd * preco,
-      }
-
-      console.log(`[v0] Item ${i} processed:`, JSON.stringify(processedItem))
-
-      // Check if item will pass the filter
-      const willPassFilter = produto_id && qtd > 0
-      console.log(`[v0] Item ${i} will pass filter:`, willPassFilter)
-
-      if (willPassFilter) {
-        itemsProcessed.push(processedItem)
-      } else {
-        console.log(`[v0] Item ${i} FILTERED OUT - produto_id:`, produto_id, "qtd:", qtd)
-      }
-    }
-
-    console.log("[v0] Items after processing and filtering:", JSON.stringify(itemsProcessed))
-    console.log("[v0] Final items count:", itemsProcessed.length)
-
-    const items = itemsProcessed
+    console.log("[v0] Processed items for storage:", JSON.stringify(items))
 
     const itensTotal = items.reduce((acc, it) => acc + Number(it.subtotal ?? 0), 0)
     const desconto = Number(payload.desconto ?? 0)
