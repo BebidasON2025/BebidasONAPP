@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { EllipsisVertical, RefreshCw, Loader2, ShoppingCart, TrendingUp, Clock, CheckCircle } from "lucide-react"
 import ConfirmationDialog from "@/components/confirmation-dialog"
 import NewOrderDialog from "@/components/two-step-order-dialog"
+import { OrderDetailsModal } from "@/components/order-details-modal"
 
 type ApiPedido = {
   id: string
@@ -33,6 +34,10 @@ export default function OrdersPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; orderId: string }>({ open: false, orderId: "" })
+  const [orderDetailsModal, setOrderDetailsModal] = useState<{ open: boolean; orderId: string | null }>({
+    open: false,
+    orderId: null,
+  })
 
   const mapRow = useCallback((r: ApiPedido) => {
     const date = r.data || r.criado_em || r.updated_at || new Date().toISOString()
@@ -179,6 +184,10 @@ export default function OrdersPage() {
     setConfirmDelete({ open: true, orderId: id })
   }
 
+  const handleOrderClick = (orderId: string) => {
+    setOrderDetailsModal({ open: true, orderId })
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in-50 duration-500">
       <PageHeader
@@ -319,8 +328,9 @@ export default function OrdersPage() {
                     return (
                       <TableRow
                         key={o.id}
-                        className={`border-slate-800 hover:bg-slate-800/20 transition-colors duration-200 ${isActionBusy ? "opacity-50" : ""}`}
+                        className={`border-slate-800 hover:bg-slate-800/20 transition-colors duration-200 cursor-pointer ${isActionBusy ? "opacity-50" : ""}`}
                         style={{ animationDelay: `${index * 50}ms` }}
+                        onClick={() => handleOrderClick(o.id)}
                       >
                         <TableCell className="font-semibold text-amber-400 text-sm">
                           {o.numero || o.id.slice(0, 8)}
@@ -400,6 +410,12 @@ export default function OrdersPage() {
         variant="destructive"
         onConfirm={() => removeOrder(confirmDelete.orderId)}
         loading={busy === confirmDelete.orderId + "del"}
+      />
+
+      <OrderDetailsModal
+        orderId={orderDetailsModal.orderId}
+        open={orderDetailsModal.open}
+        onOpenChange={(open) => setOrderDetailsModal({ open, orderId: null })}
       />
     </div>
   )

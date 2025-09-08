@@ -27,7 +27,6 @@ interface ProductDetail {
 export default function ProfitChart({ orders }: ProfitChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<"today" | "7days" | "1month">("today")
   const [products, setProducts] = useState<any[]>([])
-  const [orderItems, setOrderItems] = useState<any[]>([])
   const [percentage, setPercentage] = useState<number>(0)
   const [selectedProduct, setSelectedProduct] = useState<ProductDetail | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -54,26 +53,10 @@ export default function ProfitChart({ orders }: ProfitChartProps) {
     loadProducts()
   }, [])
 
-  useEffect(() => {
-    const loadOrderItems = async () => {
-      try {
-        const { data } = await supabase.from("itens_pedido").select(`
-            *,
-            produtos!inner(nome, preco, preco_compra, estoque)
-          `)
-        console.log("[v0] ProfitChart loaded order items:", data?.length)
-        setOrderItems(data || [])
-      } catch (error) {
-        console.error("Error loading order items:", error)
-      }
-    }
-    loadOrderItems()
-  }, [])
-
   const profitData = useMemo(() => {
     console.log("[v0] ProfitChart calculating profit data...")
-    if (!products.length || !orders.length || !orderItems.length) {
-      console.log("[v0] ProfitChart: No products, orders, or order items available")
+    if (!products.length || !orders.length) {
+      console.log("[v0] ProfitChart: No products or orders available")
       return []
     }
 
@@ -115,21 +98,22 @@ export default function ProfitChart({ orders }: ProfitChartProps) {
     } = {}
 
     filteredOrders.forEach((order: any) => {
-      const relatedItems = orderItems.filter((item) => item.pedido_id === order.id)
-      console.log(`[v0] ProfitChart order ${order.id} has ${relatedItems.length} items`)
+      const orderItems = order.itens || []
+      console.log(`[v0] ProfitChart order ${order.id} has ${orderItems.length} items`)
 
-      relatedItems.forEach((item: any) => {
-        const product = item.produtos
+      orderItems.forEach((item: any) => {
+        const product = products.find((p) => p.id === item.produto_id)
         if (product && product.preco_compra > 0) {
-          const sellingPrice = Number(item.preco || product.preco || 0)
+          const sellingPrice = Number(item.preco || item.preco_unitario || product.preco || 0)
           const purchasePrice = Number(product.preco_compra || 0)
-          const quantity = Number(item.qtd || 1)
+          const quantity = Number(item.qtd || item.quantidade || 1)
           const profitPerUnit = sellingPrice - purchasePrice
           const totalProfit = profitPerUnit * quantity
 
-          if (!productProfits[product.nome]) {
-            productProfits[product.nome] = {
-              name: product.nome,
+          const productName = item.nome || product.nome
+          if (!productProfits[productName]) {
+            productProfits[productName] = {
+              name: productName,
               profit: 0,
               quantity: 0,
               sellingPrice: sellingPrice,
@@ -137,8 +121,8 @@ export default function ProfitChart({ orders }: ProfitChartProps) {
               currentStock: Number(product.estoque || 0),
             }
           }
-          productProfits[product.nome].profit += totalProfit
-          productProfits[product.nome].quantity += quantity
+          productProfits[productName].profit += totalProfit
+          productProfits[productName].quantity += quantity
         }
       })
     })
@@ -166,7 +150,7 @@ export default function ProfitChart({ orders }: ProfitChartProps) {
     setPercentage(maxProfit > 0 ? (result[0]?.profit / maxProfit) * 100 : 0)
 
     return result
-  }, [orders, products, orderItems, selectedPeriod])
+  }, [orders, products, selectedPeriod])
 
   const totalProfit = profitData.reduce((sum, item) => sum + item.profit, 0)
 

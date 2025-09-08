@@ -56,13 +56,20 @@ function toNumber(n: unknown) {
   return isNaN(v) ? 0 : v
 }
 
+function normalizeToLocalDate(date: Date): string {
+  // Use local timezone instead of forcing UTC offset
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 function buildSeries(orders: Order[], range: RangeKey) {
   const paid = (orders || []).filter((o) => (o.status || "").toLowerCase() === "pago")
 
   if (range === "today") {
     const now = new Date()
-    // Force timezone to local and get fresh date string
-    const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+    const todayStr = normalizeToLocalDate(now)
 
     console.log(`[v0] SalesChart: Current timestamp: ${now.toISOString()}`)
     console.log(`[v0] SalesChart: Today calculated as: ${todayStr}`)
@@ -77,7 +84,7 @@ function buildSeries(orders: Order[], range: RangeKey) {
       const d = getOrderDate(o)
       if (!d) continue
 
-      const orderStr = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+      const orderStr = normalizeToLocalDate(d)
       console.log(`[v0] SalesChart: Order date: ${d.toISOString()}, normalized: ${orderStr}, today: ${todayStr}`)
 
       if (orderStr === todayStr) {
@@ -97,14 +104,14 @@ function buildSeries(orders: Order[], range: RangeKey) {
     for (let i = 0; i < 7; i++) {
       const d = new Date(start)
       d.setDate(start.getDate() + i)
-      const key = d.toISOString().slice(0, 10)
+      const key = normalizeToLocalDate(d)
       map.set(key, { label: ddmm(d), total: 0, keyDate: key })
     }
     for (const o of paid) {
       const d = getOrderDate(o)
       if (!d) continue
       if (d >= start) {
-        const key = d.toISOString().slice(0, 10)
+        const key = normalizeToLocalDate(d)
         const bucket = map.get(key)
         if (bucket) bucket.total += toNumber(o.total)
       }
@@ -118,19 +125,48 @@ function buildSeries(orders: Order[], range: RangeKey) {
   for (let i = 0; i < 30; i++) {
     const d = new Date(start)
     d.setDate(start.getDate() + i)
-    const key = d.toISOString().slice(0, 10)
+    const key = normalizeToLocalDate(d)
     map.set(key, { label: ddmm(d), total: 0, keyDate: key })
   }
   for (const o of paid) {
     const d = getOrderDate(o)
     if (!d) continue
     if (d >= start) {
-      const key = d.toISOString().slice(0, 10)
+      const key = normalizeToLocalDate(d)
       const bucket = map.get(key)
       if (bucket) bucket.total += toNumber(o.total)
     }
   }
   return Array.from(map.values())
+}
+
+function createTodaysSalesAPI() {
+  return async function getTodaysSales() {
+    try {
+      const now = new Date()
+      const todayStr = normalizeToLocalDate(now)
+
+      // This would be called by the settings dialog to get current sales
+      const response = await fetch("/api/pedidos")
+      if (!response.ok) return { total: 0, firstOrderTime: null }
+
+      const data = await response.json()
+      const orders = data.data || []
+      const paidOrders = orders.filter(
+        (o: any) =>
+          (o.status || "").toLowerCase() === "pago" &&
+          normalizeToLocalDate(new Date(o.data || o.created_at)) === todayStr,
+      )
+
+      const total = paidOrders.reduce((sum: number, order: any) => sum + toNumber(order.total), 0)
+      const firstOrderTime = paidOrders.length > 0 ? paidOrders[0].data || paidOrders[0].created_at : null
+
+      return { total, firstOrderTime }
+    } catch (error) {
+      console.error("Error fetching today sales:", error)
+      return { total: 0, firstOrderTime: null }
+    }
+  }
 }
 
 function EmptyState({ text = "Nenhuma venda registrada para o período." }) {
@@ -155,15 +191,13 @@ export default function SalesChart({
 
     if (range === "today") {
       const now = new Date()
-      const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+      const todayStr = normalizeToLocalDate(now)
       console.log(`[v0] SalesChart: Debug - Today is: ${todayStr}`)
 
       paidOrders.forEach((order, index) => {
         const orderDate = getOrderDate(order)
         if (orderDate) {
-          const orderStr = new Date(orderDate.getTime() - orderDate.getTimezoneOffset() * 60000)
-            .toISOString()
-            .slice(0, 10)
+          const orderStr = normalizeToLocalDate(orderDate)
           const isToday = orderStr === todayStr
           console.log(
             `[v0] SalesChart order ${index}: ${orderDate.toISOString()}, orderDate: ${orderStr}, today: ${todayStr}, isToday: ${isToday}, total: ${order.total}`,

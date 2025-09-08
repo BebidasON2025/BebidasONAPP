@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       .from("pedidos")
       .insert({
         cliente_nome_texto: cliente_nome,
-        telefone: cliente_telefone,
+        telefone_cliente: cliente_telefone,
         metodo: forma_pagamento,
         status: status,
         total: total,
@@ -33,6 +33,26 @@ export async function POST(request: NextRequest) {
         valor_pago: valor_pago,
         troco: troco,
         origem: "cardapio_digital",
+        itens: itens.map((item: any) => ({
+          produto_id: item.produto_id,
+          nome: item.nome_produto || "Produto",
+          qtd: item.quantidade,
+          quantidade: item.quantidade,
+          preco: item.preco,
+          preco_unitario: item.preco,
+          subtotal: item.preco * item.quantidade,
+        })),
+        ...(status === "pago" && {
+          transacao_financeira: {
+            tipo: "entrada",
+            descricao: `Venda ${pedido_cardapio_id} - ${cliente_nome}`,
+            categoria: "Vendas",
+            valor: total,
+            metodo: forma_pagamento,
+            data: new Date().toISOString(),
+          },
+          data_pagamento: new Date().toISOString(),
+        }),
       })
       .select()
       .single()
@@ -41,21 +61,8 @@ export async function POST(request: NextRequest) {
       throw new Error(`Erro ao criar pedido: ${pedidoError.message}`)
     }
 
-    for (const item of itens) {
-      // Create order item
-      const { error: itemError } = await supabase.from("itens_pedido").insert({
-        pedido_id: novoPedido.id,
-        produto_id: item.produto_id,
-        qtd: item.quantidade,
-        preco: item.preco,
-      })
-
-      if (itemError) {
-        console.error("Erro ao criar item do pedido:", itemError)
-        continue
-      }
-
-      if (status === "pago") {
+    if (status === "pago") {
+      for (const item of itens) {
         const { error: stockError } = await supabase.rpc("atualizar_estoque", {
           produto_id: item.produto_id,
           quantidade: -item.quantidade,
@@ -65,19 +72,6 @@ export async function POST(request: NextRequest) {
           console.error("Erro ao atualizar estoque:", stockError)
         }
       }
-    }
-
-    const { error: financeError } = await supabase.from("lancamentos_financeiros").insert({
-      descricao: `Venda ${novoPedido.numero_pedido || novoPedido.id} - ${cliente_nome}`,
-      valor: total,
-      tipo: "entrada",
-      categoria: "Vendas",
-      metodo: forma_pagamento,
-      pedido_id: novoPedido.id,
-    })
-
-    if (financeError) {
-      console.error("Erro ao criar lançamento financeiro:", financeError)
     }
 
     return NextResponse.json({

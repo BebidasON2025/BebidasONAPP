@@ -1,49 +1,39 @@
 import { NextResponse } from "next/server"
 import { getSupabaseAdmin, ensureTableExists, isMissingTableError } from "@/lib/db-helpers"
 
-const TABLE = "lancamentos_financeiros"
+const PEDIDOS_TABLE = "pedidos"
 
 export async function GET() {
   try {
     const supabase = getSupabaseAdmin()
-    const { exists, error } = await ensureTableExists(supabase, TABLE)
+    const { exists, error } = await ensureTableExists(supabase, PEDIDOS_TABLE)
     if (error) return NextResponse.json({ ok: false, error: error.message, data: [] }, { status: 500 })
     if (!exists) return NextResponse.json({ ok: true, data: [], table: null })
 
-    const orderCols = ["data", "criado_em", "created_at"]
-    let data: any[] = []
-    let lastErr: any = null
+    const { data, error: queryError } = await supabase
+      .from(PEDIDOS_TABLE)
+      .select("*")
+      .eq("status", "pago")
+      .order("data_pagamento", { ascending: false })
 
-    for (const col of orderCols) {
-      const r = await supabase
-        .from(TABLE)
-        .select("*")
-        .order(col as any, { ascending: false })
-      if (!r.error) {
-        data = r.data || []
-        lastErr = null
-        break
-      }
-      lastErr = r.error
+    if (queryError) {
+      if (isMissingTableError(queryError)) return NextResponse.json({ ok: true, data: [], table: PEDIDOS_TABLE })
+      return NextResponse.json({ ok: false, error: queryError.message, data: [] }, { status: 500 })
     }
 
-    if (lastErr) {
-      if (isMissingTableError(lastErr)) return NextResponse.json({ ok: true, data: [], table: TABLE })
-      return NextResponse.json({ ok: false, error: lastErr.message, data: [] }, { status: 500 })
-    }
-
-    const mapped = data.map((x: any) => ({
-      id: x.id,
-      tipo: x.tipo ?? x.type ?? "entrada",
-      descricao: x.descricao ?? x.description ?? "",
-      categoria: x.categoria ?? x.category ?? null,
-      metodo: x.metodo ?? x.method ?? null,
-      valor: Number(x.valor ?? x.amount ?? 0),
-      data: x.data ?? x.criado_em ?? x.created_at ?? null,
-      raw: x,
+    const mapped = (data || []).map((order: any) => ({
+      id: order.id,
+      tipo: "entrada",
+      descricao: `Pedido ${order.numero_pedido || order.id} - ${order.cliente_nome_texto || "Cliente"}`,
+      categoria: "Vendas",
+      metodo: order.metodo || "Dinheiro",
+      valor: Number(order.total || 0),
+      data: order.data_pagamento || order.data || order.criado_em,
+      pedido_id: order.id,
+      raw: order,
     }))
 
-    return NextResponse.json({ ok: true, data: mapped, table: TABLE })
+    return NextResponse.json({ ok: true, data: mapped, table: PEDIDOS_TABLE })
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e), data: [] }, { status: 500 })
   }
@@ -61,13 +51,12 @@ export async function POST(req: Request) {
     }
 
     const supabase = getSupabaseAdmin()
-    const { exists, error } = await ensureTableExists(supabase, TABLE)
+    const { exists, error } = await ensureTableExists(supabase, PEDIDOS_TABLE)
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
-    if (!exists)
-      return NextResponse.json({ ok: false, error: "Tabela 'lancamentos_financeiros' inexistente." }, { status: 400 })
+    if (!exists) return NextResponse.json({ ok: false, error: "Tabela 'pedidos' inexistente." }, { status: 400 })
 
     const r = await supabase
-      .from(TABLE)
+      .from(PEDIDOS_TABLE)
       .insert({
         tipo: type,
         descricao: description,
@@ -75,6 +64,7 @@ export async function POST(req: Request) {
         valor: Number(amount || 0),
         metodo: method,
         data: new Date().toISOString(),
+        status: "pago",
       })
       .select("*")
       .single()
@@ -93,12 +83,11 @@ export async function DELETE(req: Request) {
     if (!id) return NextResponse.json({ ok: false, error: "Campo 'id' é obrigatório" }, { status: 400 })
 
     const supabase = getSupabaseAdmin()
-    const { exists, error } = await ensureTableExists(supabase, TABLE)
+    const { exists, error } = await ensureTableExists(supabase, PEDIDOS_TABLE)
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
-    if (!exists)
-      return NextResponse.json({ ok: false, error: "Tabela 'lancamentos_financeiros' inexistente." }, { status: 400 })
+    if (!exists) return NextResponse.json({ ok: false, error: "Tabela 'pedidos' inexistente." }, { status: 400 })
 
-    const r = await supabase.from(TABLE).delete().eq("id", id)
+    const r = await supabase.from(PEDIDOS_TABLE).delete().eq("id", id)
     if (r.error) return NextResponse.json({ ok: false, error: r.error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   } catch (e: any) {

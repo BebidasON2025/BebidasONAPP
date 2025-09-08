@@ -301,6 +301,9 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
       const orderData = {
         cliente_nome_texto: selectedClient?.nome || clientName || null,
         cliente_id: selectedClient?.id || null,
+        telefone_cliente: clientPhone || selectedClient?.telefone || null,
+        endereco_entrega: deliveryAddress || null,
+        observacoes: observations || null,
         metodo: paymentMethod,
         status: status,
         desconto: discount,
@@ -308,12 +311,19 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
         total: getTotal(),
         valor_pago: paymentMethod === "Dinheiro" ? amountPaid : getTotal(),
         troco: paymentMethod === "Dinheiro" ? getChange() : 0,
+        origem: "sistema",
         items: cart.map((item) => ({
           produto_id: item.product.id,
+          nome: item.product.nome,
           qtd: item.quantity,
+          quantidade: item.quantity, // Alternative field name for compatibility
           preco: item.product.preco,
+          preco_unitario: item.product.preco, // Alternative field name for compatibility
+          subtotal: item.product.preco * item.quantity,
         })),
       }
+
+      console.log("[v0] Creating order with data:", orderData)
 
       const response = await fetch("/api/pedidos", {
         method: "POST",
@@ -323,8 +333,11 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
         body: JSON.stringify(orderData),
       })
 
-      if (!response.ok) {
-        throw new Error("Erro ao criar pedido")
+      const responseData = await response.json()
+      console.log("[v0] Order creation response:", responseData)
+
+      if (!response.ok || !responseData.ok) {
+        throw new Error(responseData.error || "Erro ao criar pedido")
       }
 
       setCart([])
@@ -339,10 +352,11 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
       setStep(1)
       setDialogOpen(false)
 
+      console.log("[v0] Order created successfully:", responseData.id)
       onSaved?.()
     } catch (error) {
-      console.error("Erro ao criar pedido:", error)
-      alert("Erro ao criar pedido. Tente novamente.")
+      console.error("[v0] Error creating order:", error)
+      alert(`Erro ao criar pedido: ${error.message}`)
     } finally {
       setLoading(false)
     }
@@ -756,7 +770,7 @@ function NewOrderDialog({ open, onOpenChange, onSaved, children }: TwoStepOrderD
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-blue-100 font-medium">Nome do Cliente (texto)</Label>
+                        <Label className="text-blue-100 font-medium">Nome do Cliente</Label>
                         <Input
                           value={clientName}
                           onChange={(e) => setClientName(e.target.value)}

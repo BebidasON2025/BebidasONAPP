@@ -8,6 +8,7 @@ import { AlertTriangle, BarChart3 } from "lucide-react"
 import LowStockList from "@/components/low-stock-list"
 import { formatBRL } from "@/lib/format"
 import SalesChart from "@/components/sales-chart"
+import DailySalesChart from "@/components/daily-sales-chart"
 import ProfitChart from "@/components/profit-chart"
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase-client"
@@ -74,6 +75,10 @@ export default function Page() {
           subtitle={lowCount > 0 ? `${lowCount} produtos com estoque baixo` : "Estoque ok"}
           rightIcon="box"
         />
+      </div>
+
+      <div className="w-full">
+        <DailySalesChart orders={orders} />
       </div>
 
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">

@@ -3,6 +3,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { CashRegisterSystem } from "@/components/cash-register-system"
+import { Settings, Database, Wrench } from "lucide-react"
 
 type Diag = {
   ok: boolean
@@ -57,67 +59,104 @@ export default function ConfiguracoesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Configurações</h1>
-      <p className="text-muted-foreground">
-        Ferramentas para diagnosticar a conexão e reinstalar o banco em Português (PT‑BR).
-      </p>
+    <div className="space-y-6 animate-in fade-in-50 duration-500">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-2 rounded-lg bg-slate-800/50 border border-slate-700">
+          <Settings className="h-6 w-6 text-amber-400" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold text-white">Configurações</h1>
+          <p className="text-slate-400">Gerencie o sistema de caixa e configurações do banco de dados.</p>
+        </div>
+      </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="hc-panel">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Diagnóstico do Banco</CardTitle>
+      <CashRegisterSystem />
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="bg-slate-900/50 border-slate-800 shadow-xl">
+          <CardHeader className="border-b border-slate-800">
+            <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
+              <Database className="h-5 w-5 text-blue-400" />
+              Diagnóstico do Banco
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="p-6 space-y-4">
             <Button
               onClick={runDiag}
               disabled={loading === "diag"}
-              className="bg-amber-500 hover:bg-amber-600 text-black"
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white"
             >
               {loading === "diag" ? "Verificando..." : "Diagnosticar Banco"}
             </Button>
             {diag ? (
-              <pre className="mt-2 max-h-80 overflow-auto rounded-md bg-[#1f242c] p-3 text-xs">
+              <pre className="max-h-80 overflow-auto rounded-md bg-slate-800/50 border border-slate-700 p-3 text-xs text-slate-300">
                 {JSON.stringify(diag, null, 2)}
               </pre>
             ) : (
-              <div className="text-sm hc-muted">Nenhum diagnóstico executado ainda.</div>
+              <div className="text-sm text-slate-400 text-center py-4">Nenhum diagnóstico executado ainda.</div>
             )}
           </CardContent>
         </Card>
 
-        <Card className="hc-panel">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Reinstalar Banco PT‑BR</CardTitle>
+        <Card className="bg-slate-900/50 border-slate-800 shadow-xl">
+          <CardHeader className="border-b border-slate-800">
+            <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
+              <Wrench className="h-5 w-5 text-orange-400" />
+              Reinstalar Banco PT‑BR
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="p-6 space-y-4">
             <Button
               onClick={runReset}
               disabled={loading === "reset"}
-              className="bg-[#1d2430] border border-[#3f4b60] hover:bg-[#232c3d] text-white"
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white"
             >
               {loading === "reset" ? "Reinstalando..." : "Reinstalar Banco PT‑BR"}
             </Button>
             {reset ? (
-              <pre className="mt-2 max-h-80 overflow-auto rounded-md bg-[#1f242c] p-3 text-xs">
+              <pre className="max-h-80 overflow-auto rounded-md bg-slate-800/50 border border-slate-700 p-3 text-xs text-slate-300">
                 {JSON.stringify(reset, null, 2)}
               </pre>
             ) : (
-              <div className="text-sm hc-muted">Executa reset do schema público e instala tabelas em português.</div>
+              <div className="text-sm text-slate-400 text-center py-4">
+                Executa reset do schema público e instala tabelas em português.
+              </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <Card className="hc-panel">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Dicas rápidas</CardTitle>
+      <Card className="bg-slate-900/50 border-slate-800 shadow-xl">
+        <CardHeader className="border-b border-slate-800">
+          <CardTitle className="text-lg font-semibold text-white">Dicas Rápidas</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm hc-muted space-y-1">
-          <div>1) Garanta que POSTGRES_URL (ou similares) esteja definido com a Connection String do Postgres.</div>
-          <div>2) Rode “Diagnosticar Banco” para validar conexão e existência da tabela produtos.</div>
-          <div>3) Se faltar tabelas, clique em “Reinstalar Banco PT‑BR”.</div>
-          <div>4) Volte para Estoque e recarregue a página.</div>
+        <CardContent className="p-6">
+          <div className="grid gap-3 text-sm text-slate-300">
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-xs font-bold text-amber-400">1</span>
+              </div>
+              <p>Garanta que POSTGRES_URL (ou similares) esteja definido com a Connection String do Postgres.</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-xs font-bold text-amber-400">2</span>
+              </div>
+              <p>Rode "Diagnosticar Banco" para validar conexão e existência das tabelas.</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-xs font-bold text-amber-400">3</span>
+              </div>
+              <p>Se faltar tabelas, clique em "Reinstalar Banco PT‑BR".</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-xs font-bold text-amber-400">4</span>
+              </div>
+              <p>Abra o caixa manualmente todos os dias para começar a registrar vendas.</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

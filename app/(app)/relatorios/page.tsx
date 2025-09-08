@@ -4,6 +4,7 @@ import PageHeader from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { DailyReportCard } from "@/components/daily-report-card"
 import { formatBRL } from "@/lib/format"
 import { useState, useEffect, useMemo } from "react"
 import { supabase } from "@/lib/supabase-client"
@@ -46,6 +47,8 @@ export default function RelatoriosPage() {
 
     loadData()
   }, [])
+
+  const todayDate = new Date().toISOString().split("T")[0]
 
   const filteredData = useMemo(() => {
     const now = new Date()
@@ -219,6 +222,8 @@ export default function RelatoriosPage() {
           </div>
         }
       />
+
+      <DailyReportCard date={todayDate} />
 
       <Card className="bg-slate-900/50 border-slate-800">
         <CardContent className="p-4">

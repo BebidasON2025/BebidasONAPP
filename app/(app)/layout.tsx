@@ -18,21 +18,50 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [lastLowStockCount, setLastLowStockCount] = useState(0)
   const { products } = useAppStore()
 
-  const lowStockProducts = Array.isArray(products) ? products.filter((p) => p.estoque <= (p.alerta_estoque || 10)) : []
+  const lowStockProducts = Array.isArray(products)
+    ? products.filter((p) => {
+        const currentStock = Number(p.estoque || 0)
+        const alertThreshold = Number(p.alerta_estoque || 5) // Changed default from 10 to 5
+        const isLowStock = currentStock > 0 && currentStock <= alertThreshold // Only show if stock > 0 but below threshold
+
+        if (isLowStock) {
+          console.log("[v0] Low stock product:", {
+            name: p.nome,
+            currentStock,
+            alertThreshold,
+            isLowStock,
+          })
+        }
+
+        return isLowStock
+      })
+    : []
 
   useEffect(() => {
+    console.log("[v0] Notification count update:", {
+      totalProducts: products?.length || 0,
+      lowStockCount: lowStockProducts.length,
+      lowStockProducts: lowStockProducts.map((p) => ({ name: p.nome, stock: p.estoque, alert: p.alerta_estoque })),
+    })
     setLastLowStockCount(lowStockProducts.length)
-  }, [lowStockProducts.length])
+  }, [lowStockProducts.length, products])
 
   const notifications = [
     ...lowStockProducts.map((product) => ({
       id: `low-stock-${product.id}`,
       type: "warning" as const,
       title: "Estoque Baixo",
-      message: `${product.nome} tem apenas ${product.estoque} unidades`,
+      message: `${product.nome} tem apenas ${product.estoque} unidades (limite: ${product.alerta_estoque || 5})`,
       time: "Agora",
     })),
   ]
+
+  const clearAllNotifications = () => {
+    // For now, we'll just close the panel since low stock notifications are auto-generated
+    // In the future, this could mark notifications as read in a database
+    setNotificationsOpen(false)
+    console.log("[v0] All notifications marked as read")
+  }
 
   return (
     <div className="min-h-screen w-full flex text-white bg-gray-900">
@@ -132,7 +161,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                           variant="ghost"
                           size="sm"
                           className="w-full text-xs text-gray-300 hover:text-white hover:bg-gray-600/50 transition-all duration-200"
-                          onClick={() => setNotificationsOpen(false)}
+                          onClick={clearAllNotifications}
                         >
                           Marcar todas como lidas
                         </Button>

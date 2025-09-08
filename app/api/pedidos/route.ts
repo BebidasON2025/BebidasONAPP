@@ -3,7 +3,6 @@ import { getSupabaseAdmin, ensureTableExists, isMissingTableError } from "@/lib/
 
 const ORDER_TABLE = "pedidos"
 const PRODUCT_TABLE = "produtos"
-const ITEM_TABLE = "itens_pedido"
 
 type PedidoItemAny = {
   produto_id?: string
@@ -14,6 +13,8 @@ type PedidoItemAny = {
   qty?: number
   preco?: number
   price?: number
+  nome?: string
+  name?: string
 }
 
 type PedidoPayload = {
@@ -27,6 +28,12 @@ type PedidoPayload = {
   items?: PedidoItemAny[]
   total?: number | null
   cliente_nome_texto?: string | null
+  valor_pago?: number
+  troco?: number
+  endereco_entrega?: string
+  telefone_cliente?: string
+  observacoes?: string
+  origem?: string
 }
 
 async function generateOrderNumber(supabase: any): Promise<string> {
@@ -86,22 +93,77 @@ export async function POST(req: Request) {
     const payload = (await req.json().catch(() => ({}))) as PedidoPayload
     const supabase = getSupabaseAdmin()
 
+    console.log(
+      "[v0] Order creation payload received:",
+      JSON.stringify({
+        items: payload.items,
+        total: payload.total,
+        metodo: payload.metodo,
+      }),
+    )
+
     const ordersExists = await ensureTableExists(supabase, ORDER_TABLE)
     if (ordersExists.error) return NextResponse.json({ ok: false, error: ordersExists.error.message }, { status: 500 })
     if (!ordersExists.exists)
       return NextResponse.json({ ok: false, error: "Tabela 'pedidos' inexistente." }, { status: 400 })
 
     const itemsRaw = Array.isArray(payload.items) ? payload.items : []
-    const items = itemsRaw
-      .map((it) => {
-        const produto_id = it.produto_id || it.produtoId || it.productId || it.id
-        const qtd = Number(it.qtd ?? it.qty ?? 0)
-        const preco = Number(it.preco ?? it.price ?? 0)
-        return { produto_id, qtd, preco }
-      })
-      .filter((i) => i.produto_id && i.qtd > 0)
+    console.log("[v0] Raw items array:", JSON.stringify(itemsRaw))
+    console.log("[v0] Raw items array length:", itemsRaw.length)
 
-    const itensTotal = items.reduce((acc, it) => acc + Number(it.preco ?? 0) * Number(it.qtd ?? 0), 0)
+    const itemsProcessed = []
+    for (let i = 0; i < itemsRaw.length; i++) {
+      const it = itemsRaw[i]
+      console.log(`[v0] Processing item ${i}:`, JSON.stringify(it))
+
+      const produto_id = it.produto_id || it.produtoId || it.productId || it.id
+      const qtd = Number(it.qtd ?? it.qty ?? 0)
+      const preco = Number(it.preco ?? it.price ?? 0)
+      let nome = it.nome || it.name || "Produto"
+
+      console.log(`[v0] Item ${i} extracted values:`, {
+        produto_id,
+        qtd,
+        preco,
+        nome,
+        hasValidId: !!produto_id,
+        hasValidQty: qtd > 0,
+      })
+
+      // Get product name if not provided
+      if (!it.nome && !it.name && produto_id) {
+        const { data: product } = await supabase.from(PRODUCT_TABLE).select("nome").eq("id", produto_id).single()
+        nome = product?.nome || "Produto"
+        console.log(`[v0] Item ${i} fetched product name:`, nome)
+      }
+
+      const processedItem = {
+        produto_id,
+        qtd,
+        preco,
+        nome,
+        subtotal: qtd * preco,
+      }
+
+      console.log(`[v0] Item ${i} processed:`, JSON.stringify(processedItem))
+
+      // Check if item will pass the filter
+      const willPassFilter = produto_id && qtd > 0
+      console.log(`[v0] Item ${i} will pass filter:`, willPassFilter)
+
+      if (willPassFilter) {
+        itemsProcessed.push(processedItem)
+      } else {
+        console.log(`[v0] Item ${i} FILTERED OUT - produto_id:`, produto_id, "qtd:", qtd)
+      }
+    }
+
+    console.log("[v0] Items after processing and filtering:", JSON.stringify(itemsProcessed))
+    console.log("[v0] Final items count:", itemsProcessed.length)
+
+    const items = itemsProcessed
+
+    const itensTotal = items.reduce((acc, it) => acc + Number(it.subtotal ?? 0), 0)
     const desconto = Number(payload.desconto ?? 0)
     const taxa = Number(payload.taxa_entrega ?? 0)
     const computedTotal = itensTotal + taxa - desconto
@@ -126,55 +188,116 @@ export async function POST(req: Request) {
       data: payload.data ?? nowIso,
       criado_em: nowIso,
       atualizado_em: nowIso,
+      itens: items, // Store items as JSONB in pedidos table
+      valor_pago: payload.valor_pago ?? total,
+      troco: payload.troco ?? 0,
+      desconto: desconto,
+      taxa_entrega: taxa,
+      endereco_entrega: payload.endereco_entrega ?? null,
+      telefone_cliente: payload.telefone_cliente ?? null,
+      observacoes: payload.observacoes ?? null,
+      origem: payload.origem ?? "sistema",
+      tipo_transacao: "venda",
     }
 
-    const created = await supabase.from(ORDER_TABLE).insert([insertOrder]).select("id, numero_pedido").single()
-    if (created.error) return NextResponse.json({ ok: false, error: created.error.message }, { status: 500 })
+    console.log(
+      "[v0] Order object before insert:",
+      JSON.stringify({
+        numero_pedido: insertOrder.numero_pedido,
+        itens: insertOrder.itens,
+        total: insertOrder.total,
+      }),
+    )
+
+    const created = await supabase.from(ORDER_TABLE).insert([insertOrder]).select("id, numero_pedido, itens").single()
+    if (created.error) {
+      console.error("[v0] Order creation error:", created.error)
+      return NextResponse.json({ ok: false, error: created.error.message }, { status: 500 })
+    }
+
     const pedidoId = created.data?.id as string
     const pedidoNumber = created.data?.numero_pedido || orderNumber
 
-    // Inserir itens
-    const itemsExists = await ensureTableExists(supabase, ITEM_TABLE)
-    if (!itemsExists.error && itemsExists.exists && items.length > 0) {
-      const toInsert = items.map((it) => ({
-        pedido_id: pedidoId,
-        produto_id: it.produto_id!,
-        qtd: Number(it.qtd ?? 0),
-        preco: Number(it.preco ?? 0),
-      }))
-      const itemsIns = await supabase.from(ITEM_TABLE).insert(toInsert)
-      if (itemsIns.error) return NextResponse.json({ ok: false, error: itemsIns.error.message }, { status: 500 })
-    }
+    console.log("[v0] Order created successfully:", {
+      id: pedidoId,
+      numero: pedidoNumber,
+      storedItems: created.data?.itens,
+    })
 
-    // Baixar estoque
+    const { data: verifyOrder } = await supabase
+      .from(ORDER_TABLE)
+      .select("id, numero_pedido, itens")
+      .eq("id", pedidoId)
+      .single()
+    console.log("[v0] Verification - Order retrieved after creation:", {
+      id: verifyOrder?.id,
+      numero: verifyOrder?.numero_pedido,
+      itens: verifyOrder?.itens,
+    })
+
     if (items.length > 0) {
+      console.log("[v0] Starting inventory deduction for", items.length, "items")
+
       const prodExists = await ensureTableExists(supabase, PRODUCT_TABLE)
-      if (!prodExists.error && prodExists.exists) {
+      if (prodExists.error) {
+        console.error("[v0] Product table check failed:", prodExists.error)
+      } else if (!prodExists.exists) {
+        console.error("[v0] Product table does not exist")
+      } else {
+        console.log("[v0] Product table exists, proceeding with inventory deduction")
+
         const byProduct = new Map<string, number>()
         for (const it of items) {
-          byProduct.set(it.produto_id!, (byProduct.get(it.produto_id!) ?? 0) + Number(it.qtd ?? 0))
+          const currentQty = byProduct.get(it.produto_id!) ?? 0
+          const newQty = currentQty + Number(it.qtd ?? 0)
+          byProduct.set(it.produto_id!, newQty)
+          console.log("[v0] Product", it.produto_id, "quantity to deduct:", newQty)
         }
+
         const ids = Array.from(byProduct.keys())
+        console.log("[v0] Product IDs to update:", ids)
+
         if (ids.length) {
-          const stocks = await supabase.from(PRODUCT_TABLE).select("id, estoque").in("id", ids)
-          if (!stocks.error) {
-            const updates =
-              (stocks.data || []).map((row: any) => {
-                const dec = byProduct.get(row.id) ?? 0
-                const current = Number(row.estoque ?? 0)
-                const next = Math.max(0, current - dec)
-                return { id: row.id, estoque: next }
-              }) || []
+          const stocks = await supabase.from(PRODUCT_TABLE).select("id, estoque, nome").in("id", ids)
+          if (stocks.error) {
+            console.error("[v0] Error fetching current stock levels:", stocks.error)
+          } else {
+            console.log("[v0] Current stock levels:", stocks.data)
+
+            const updates = (stocks.data || []).map((row: any) => {
+              const dec = byProduct.get(row.id) ?? 0
+              const current = Number(row.estoque ?? 0)
+              const next = Math.max(0, current - dec)
+              console.log("[v0] Product", row.nome, "- Current:", current, "Deduct:", dec, "New:", next)
+              return { id: row.id, estoque: next, nome: row.nome }
+            })
+
+            console.log("[v0] Inventory updates to apply:", updates)
+
             for (const u of updates) {
-              await supabase.from(PRODUCT_TABLE).update({ estoque: u.estoque }).eq("id", u.id)
+              const updateResult = await supabase.from(PRODUCT_TABLE).update({ estoque: u.estoque }).eq("id", u.id)
+              if (updateResult.error) {
+                console.error("[v0] Error updating inventory for", u.nome, ":", updateResult.error)
+              } else {
+                console.log("[v0] Successfully updated inventory for", u.nome, "to", u.estoque)
+              }
+            }
+
+            // Verify inventory updates
+            const verifyStocks = await supabase.from(PRODUCT_TABLE).select("id, estoque, nome").in("id", ids)
+            if (!verifyStocks.error) {
+              console.log("[v0] Verified inventory levels after update:", verifyStocks.data)
             }
           }
         }
       }
+    } else {
+      console.log("[v0] No items to process for inventory deduction")
     }
 
     return NextResponse.json({ ok: true, id: pedidoId, numero: pedidoNumber })
   } catch (e: any) {
+    console.error("[v0] Order creation exception:", e)
     return NextResponse.json({ ok: false, error: String(e) }, { status: 500 })
   }
 }
@@ -189,11 +312,6 @@ export async function DELETE(req: Request) {
     const { exists, error } = await ensureTableExists(supabase, ORDER_TABLE)
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
     if (!exists) return NextResponse.json({ ok: false, error: "Tabela 'pedidos' inexistente." }, { status: 400 })
-
-    const itemsExists = await ensureTableExists(supabase, ITEM_TABLE)
-    if (!itemsExists.error && itemsExists.exists) {
-      await supabase.from(ITEM_TABLE).delete().eq("pedido_id", id)
-    }
 
     const result = await supabase.from(ORDER_TABLE).delete().eq("id", id)
     if (result.error) return NextResponse.json({ ok: false, error: result.error.message }, { status: 500 })
@@ -216,9 +334,22 @@ export async function PATCH(req: Request) {
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
     if (!exists) return NextResponse.json({ ok: false, error: "Tabela 'pedidos' inexistente." }, { status: 400 })
 
+    const { data: orderData } = await supabase.from(ORDER_TABLE).select("*").eq("id", id).single()
+
     const updateData = {
       status,
       atualizado_em: new Date().toISOString(),
+      ...(status === "pago" && {
+        transacao_financeira: {
+          tipo: "entrada",
+          descricao: `Pedido ${orderData?.numero_pedido || id} - Pagamento`,
+          categoria: "Vendas",
+          valor: Number(orderData?.total || 0),
+          metodo: orderData?.metodo || "Dinheiro",
+          data: new Date().toISOString(),
+        },
+        data_pagamento: new Date().toISOString(),
+      }),
     }
 
     const result = await supabase.from(ORDER_TABLE).update(updateData).eq("id", id)

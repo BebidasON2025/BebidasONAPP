@@ -614,15 +614,6 @@ function BebidasOnAppContent() {
       return
     }
 
-    if (!cliente.trim()) {
-      addToast({
-        type: "error",
-        title: "Nome do cliente ausente!",
-        description: "Por favor, informe o nome do cliente.",
-      })
-      return
-    }
-
     try {
       setProcessandoPedido(true)
 
@@ -635,7 +626,7 @@ function BebidasOnAppContent() {
         formaPagamento,
         valorPago: formaPagamento === "dinheiro" ? valorPago : total,
         troco: formaPagamento === "dinheiro" ? (valorPago || 0) - total : 0,
-        cliente,
+        cliente: cliente.trim() || "Cliente",
         tipoEntrega,
         endereco: tipoEntrega === "entrega" ? endereco : "",
         observacoes,
@@ -661,6 +652,7 @@ function BebidasOnAppContent() {
             observacoes: novoPedido.observacoes,
           }
 
+          console.log("🔄 Enviando pedido para sistema principal:", pedidoParaSistema)
           const response = await fetch(`${SISTEMA_API_URL}/api/menu/pedidos`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -670,24 +662,75 @@ function BebidasOnAppContent() {
           if (response.ok) {
             console.log("✅ Pedido enviado para o sistema principal")
           } else {
-            console.error("❌ Erro ao enviar pedido para o sistema principal")
+            console.error("❌ Erro ao enviar pedido para o sistema principal:", response.status)
           }
         } catch (error) {
           console.error("❌ Erro na integração com sistema principal:", error)
         }
       }
 
+      const enviarWhatsApp = () => {
+        let mensagem = `🍺 *NOVO PEDIDO - ${novoPedido.id}* 🍺\n\n`
+        mensagem += `👤 *Cliente:* ${novoPedido.cliente}\n`
+        mensagem += `📅 *Data:* ${new Date(novoPedido.data).toLocaleString("pt-BR")}\n\n`
+        mensagem += `🛒 *Itens do Pedido:*\n`
+
+        novoPedido.itens.forEach((item) => {
+          mensagem += `• ${item.quantidade}x ${item.bebida.nome} - R$ ${(item.bebida.preco * item.quantidade).toFixed(2)}\n`
+        })
+
+        mensagem += `\n💰 *Total:* R$ ${novoPedido.total.toFixed(2)}\n`
+        mensagem += `💳 *Pagamento:* ${novoPedido.formaPagamento === "cartao" ? "Cartão" : novoPedido.formaPagamento === "pix" ? "PIX" : "Dinheiro"}\n`
+
+        if (novoPedido.formaPagamento === "dinheiro" && novoPedido.troco > 0) {
+          mensagem += `💵 *Valor pago:* R$ ${novoPedido.valorPago.toFixed(2)}\n`
+          mensagem += `🔄 *Troco:* R$ ${novoPedido.troco.toFixed(2)}\n`
+        }
+
+        if (novoPedido.endereco) {
+          mensagem += `🏠 *Endereço:* ${novoPedido.endereco}\n`
+        } else {
+          mensagem += `🏪 *Retirada no balcão*\n`
+        }
+
+        if (novoPedido.observacoes) {
+          mensagem += `📝 *Observações:* ${novoPedido.observacoes}\n`
+        }
+
+        const whatsappUrl = `https://wa.me/${TELEFONE_WHATSAPP}?text=${encodeURIComponent(mensagem)}`
+
+        try {
+          // Try multiple methods to ensure WhatsApp opens
+          window.open(whatsappUrl, "_blank")
+
+          setTimeout(() => {
+            const link = document.createElement("a")
+            link.href = whatsappUrl
+            link.target = "_blank"
+            link.click()
+          }, 100)
+
+          console.log("✅ Mensagem enviada para WhatsApp")
+        } catch (error) {
+          console.error("❌ Erro ao enviar para WhatsApp:", error)
+        }
+      }
+
       console.log("🔄 Finalizando pedido:", novoPedido)
       setPedidos((prev) => [novoPedido, ...prev])
+
+      enviarWhatsApp()
+
       setCarrinho([])
       setCliente("")
       setEndereco("")
       setObservacoes("")
       setTelaAtual("inicio")
+
       addToast({
         type: "success",
         title: "Pedido finalizado!",
-        description: "Seu pedido foi registrado com sucesso.",
+        description: "Seu pedido foi registrado e enviado para WhatsApp.",
       })
     } catch (error) {
       console.error("❌ Erro ao finalizar pedido:", error)

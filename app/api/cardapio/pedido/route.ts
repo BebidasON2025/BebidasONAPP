@@ -81,19 +81,35 @@ export async function POST(request: Request) {
     // Calcular total
     const total = items.reduce((sum: number, item: any) => sum + item.preco * item.quantidade, 0)
 
-    // Criar o pedido
     const { data: pedido, error: pedidoError } = await supabase
       .from("pedidos")
       .insert({
         numero_pedido: numeroVenda,
         cliente_nome_texto: cliente_nome,
-        telefone: cliente_telefone,
-        endereco: cliente_endereco,
+        telefone_cliente: cliente_telefone,
+        endereco_entrega: cliente_endereco,
         metodo: metodo_pagamento,
         status: "pendente",
         total: total,
         observacoes: observacoes,
-        origem: "cardapio", // Identificar origem do pedido
+        origem: "cardapio",
+        itens: items.map((item: any) => ({
+          produto_id: item.produto_id,
+          nome: item.nome_produto,
+          qtd: item.quantidade,
+          quantidade: item.quantidade,
+          preco: item.preco,
+          preco_unitario: item.preco,
+          subtotal: item.preco * item.quantidade,
+        })),
+        transacao_financeira: {
+          tipo: "entrada",
+          descricao: `${numeroVenda} - Pedido do cardápio`,
+          categoria: "Vendas",
+          valor: total,
+          metodo: metodo_pagamento,
+          data: new Date().toISOString(),
+        },
       })
       .select()
       .single()
@@ -108,17 +124,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // Criar itens do pedido e atualizar estoque
     for (const item of items) {
-      // Inserir item do pedido
-      await supabase.from("itens_pedido").insert({
-        pedido_id: pedido.id,
-        produto_id: item.produto_id,
-        qtd: item.quantidade,
-        preco: item.preco,
-      })
-
-      // Atualizar estoque
       await supabase
         .from("produtos")
         .update({
@@ -126,15 +132,6 @@ export async function POST(request: Request) {
         })
         .eq("id", item.produto_id)
     }
-
-    // Criar lançamento financeiro
-    await supabase.from("lancamentos_financeiros").insert({
-      descricao: `${numeroVenda} - Pedido do cardápio`,
-      categoria: "Vendas",
-      metodo: metodo_pagamento,
-      valor: total,
-      tipo: "entrada",
-    })
 
     return Response.json({
       ok: true,

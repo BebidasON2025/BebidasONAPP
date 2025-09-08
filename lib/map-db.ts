@@ -1,12 +1,5 @@
 import type { Product, Customer, Supplier, FinanceEntry, Order, Invoice } from "./store"
-import type {
-  ProdutoRow,
-  ClienteRow,
-  FornecedorRow,
-  LancamentoFinanceiroRow,
-  PedidoRow,
-  NotaFiscalRow,
-} from "./db-types-ptbr"
+import type { ProdutoRow, ClienteRow, FornecedorRow, PedidoRow, NotaFiscalRow } from "./db-types-ptbr"
 
 export function mapProdutoRowToStore(p: ProdutoRow): Product {
   return {
@@ -53,16 +46,16 @@ export function mapFornecedorRowToStore(f: FornecedorRow): Supplier {
   }
 }
 
-export function mapLancamentoRowToStore(l: LancamentoFinanceiroRow): FinanceEntry {
+export function mapLancamentoRowToStore(l: any): FinanceEntry {
   return {
     id: l.id,
-    type: l.tipo,
-    description: l.descricao,
-    category: l.categoria,
-    amount: Number(l.valor || 0),
-    method: l.metodo,
-    date: l.data,
-    reference: null,
+    type: l.tipo || l.type || "entrada",
+    description: l.descricao || l.description || "",
+    category: l.categoria || l.category || "Vendas",
+    amount: Number(l.valor || l.amount || 0),
+    method: l.metodo || l.method || "Dinheiro",
+    date: l.data || l.date || new Date().toISOString(),
+    reference: l.pedido_id || null,
     notes: null,
   }
 }

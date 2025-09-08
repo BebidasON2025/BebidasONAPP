@@ -3,7 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { BarChart3, Home, Package, Receipt, ShoppingCart, Truck, Users, Wallet, X } from "lucide-react"
+import { BarChart3, Home, Package, Receipt, ShoppingCart, Users, Wallet, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
@@ -16,7 +16,6 @@ const gestao = [
   { href: "/financeiro", label: "Financeiro", icon: Wallet },
   { href: "/fiado", label: "Comprovante Fiado", icon: Receipt },
   { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/fornecedores", label: "Fornecedores", icon: Truck },
 ]
 const analises = [{ href: "/relatorios", label: "Relatórios", icon: BarChart3 }]
 
